@@ -1,0 +1,27 @@
+{
+	"name": "cursor-pocket-agent",
+	"displayName": "Pocket Agent",
+	"version": "1.0.0",
+	"description": "Mobile interface for Cursor's composer",
+	"publisher": "cursor-tools",
+	"main": "cursor-plugin.js",
+	"engines": {
+		"vscode": "^1.70.0"
+	},
+	"activationEvents": [
+		"*"
+	],
+	"contributes": {
+		"commands": [
+			{
+				"command": "_extensionClient.toolCall",
+				"title": "Execute Tool Call",
+				"category": "Cursor"
+			}
+		]
+	},
+	"dependencies": {
+		"socket.io-client": "^4.7.2",
+		"vscode": "^1.1.37"
+	}
+}
