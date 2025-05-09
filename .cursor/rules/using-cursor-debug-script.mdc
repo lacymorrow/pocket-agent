@@ -1,0 +1,52 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Using the `cursor_debug.py` Script for Programmatic Interaction
+
+This rule describes the usage and functionality of the [cli-control-cursor-ide/cursor_debug.py](mdc:cli-control-cursor-ide/cursor_debug.py) script, which allows for sending messages and commands to an active Cursor instance programmatically.
+
+## Purpose
+
+The primary purpose of [cli-control-cursor-ide/cursor_debug.py](mdc:cli-control-cursor-ide/cursor_debug.py) is to automate sending text input to Cursor, simulating user actions like opening the composer, typing a message, and optionally invoking the `@Web` command before sending.
+
+## Requirements
+
+1.  **Cursor IDE Running with Debugging Port**:
+    *   Cursor **must** be launched with the `--remote-debugging-port=9223` flag. Refer to the `controlling-cursor-via-cdp.mdc` rule for more details on this requirement.
+    *   Example launch command: `/Applications/Cursor.app/Contents/MacOS/Cursor --remote-debugging-port=9223`
+
+2.  **Python Environment**:
+    *   A Python 3 environment is required.
+    *   The script depends on the `aiohttp` and `websockets` libraries. These can typically be installed via pip: `pip install aiohttp websockets`.
+
+## How to Run the Script
+
+The script is executed from the command line.
+
+*   **Send a simple message**:
+    ```bash
+    python cli-control-cursor-ide/cursor_debug.py "Your message to Cursor"
+    ```
+
+*   **Send a message using the `@Web` command**:
+    ```bash
+    python cli-control-cursor-ide/cursor_debug.py "Your web search query" --web
+    ```
+
+## Script Logic Overview
+
+1.  **Connect to Cursor**: The script initiates a WebSocket connection to Cursor via the specified debug port (`9223`). It automatically discovers the correct `webSocketDebuggerUrl` for a `type: "page"` target, as detailed in the `controlling-cursor-via-cdp.mdc` rule.
+2.  **Simulate Keyboard Input**: It uses the Chrome DevTools Protocol (CDP) command `Input.dispatchKeyEvent` to simulate keyboard inputs.
+    *   Shortcuts (e.g., Cmd+Shift+P, Cmd+Shift+Y) are sent as sequences of `keyDown` and `keyUp` events.
+    *   Text messages are sent as a sequence of individual character events (`type: "char"`).
+3.  **Modifier Key Handling**: The script correctly converts common modifier key names (like `Mod.META`, `Mod.SHIFT`) into the bitmask format required by CDP, adapting `Mod.CMD_OR_CTRL` based on the operating system (macOS vs. others).
+4.  **Command Sequence**: For sending a message, the script typically performs the following sequence:
+    *   Simulates Cmd+Shift+P (to unfocus chat, if active).
+    *   Simulates Cmd+Shift+Y (to open the composer).
+    *   Types the provided message text.
+    *   If `--web` is specified, types " @Web" and presses Enter.
+    *   Presses Enter to send the final message/command.
+
+This script provides a practical implementation of the principles outlined in the `controlling-cursor-via-cdp.mdc` rule, enabling automated interaction with the Cursor IDE.
