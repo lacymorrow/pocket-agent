@@ -1,0 +1,60 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Programmatic Control of Cursor via Chrome DevTools Protocol (CDP)
+
+This rule outlines the verified method for programmatically controlling the Cursor IDE from an external script, such as [cli-control-cursor-ide/cursor_debug.py](mdc:cli-control-cursor-ide/cursor_debug.py), using Python and the Chrome DevTools Protocol.
+
+## Core Requirements & Steps:
+
+1.  **Launch Cursor with Specific Flag**:
+    *   Cursor **must** be launched with the `--remote-debugging-port` command-line flag. This exposes a "page" type debuggable target, which is essential for UI automation.
+    *   Example: `/Applications/Cursor.app/Contents/MacOS/Cursor --remote-debugging-port=9223`
+    *   The chosen port (e.g., `9223`) will be used by the control script.
+
+2.  **Discover the WebSocket Target**:
+    *   The control script must first query `http://localhost:<PORT>/json/list` (e.g., `http://localhost:9223/json/list`) to find available debuggable targets.
+    *   It needs to identify a target with `type: "page"`. The `webSocketDebuggerUrl` from this target's JSON object is used for the WebSocket connection.
+    *   Example successful target snippet from port 9223:
+        ```json
+        [ {
+           "type": "page",
+           "webSocketDebuggerUrl": "ws://localhost:9223/devtools/page/A3F5CB757CF993741720A494490E3C41"
+        } ]
+        ```
+
+3.  **Connect via WebSocket and Send Commands**:
+    *   The script connects to the `webSocketDebuggerUrl` obtained in the previous step.
+    *   UI interactions are performed by sending `Input.dispatchKeyEvent` CDP commands over this WebSocket.
+    *   This method requires sending both `keyDown` and `keyUp` events, often with a small delay between them.
+    *   Example `Input.dispatchKeyEvent` parameters for an "Enter" key press:
+        ```json
+        {
+            "type": "keyDown", // or "keyUp"
+            "modifiers": 0,
+            "windowsVirtualKeyCode": 13, // VK_RETURN
+            "key": "Enter",
+            "code": "Enter",
+            "text": "\r", // For keyDown event, represents the character produced
+            "unmodifiedText": "\r", // For keyDown
+            "nativeVirtualKeyCode": 36 // macOS specific virtual key code for Enter
+        }
+        ```
+    *   The `id` field in the CDP command message should be unique for each command sent.
+
+4.  **Script Implementation**:
+    *   The primary script for this functionality is [cli-control-cursor-ide/cursor_debug.py](mdc:cli-control-cursor-ide/cursor_debug.py).
+    *   This script should be configured to use the correct debugging port (e.g., `9223`) and implement the `Input.dispatchKeyEvent` logic as described.
+
+## Troubleshooting:
+
+*   **Connection Refused/No Page Target**: Ensure Cursor was launched with the `--remote-debugging-port=<PORT>` flag and that the script is targeting the same `<PORT>`.
+*   **Commands Not Working**:
+    *   Verify the WebSocket connection is to a `type: "page"` target.
+    *   Double-check the parameters for `Input.dispatchKeyEvent`, especially `key`, `code`, `windowsVirtualKeyCode`, `nativeVirtualKeyCode`, and `text` (for `keyDown`).
+    *   Ensure unique `id`s are used for each CDP message.
+*   **WebSocket URL Changes**: The specific `webSocketDebuggerUrl` (e.g., the long ID string like `A3F5CB757CF993741720A494490E3C41`) can change if Cursor is restarted or different windows/tabs become the primary focus. The script should ideally re-fetch this URL from `/json/list` at the start of each session.
+
+This method was successfully tested by sending an "Enter" key press to Cursor running on port 9223.
