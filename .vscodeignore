@@ -1,0 +1,6 @@
+.vscode/**
+.git/**
+.DS_Store
+*.log
+# src/server/**
+# node_modules

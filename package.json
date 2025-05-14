@@ -1,50 +1,53 @@
 {
-	"name": "cursor-pocket-agent",
-	"displayName": "Pocket Agent",
-	"version": "1.0.0",
-	"description": "Mobile interface for Cursor's composer",
-	"publisher": "cursor-tools",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/cursor-tools/pocket-agent"
-	},
-	"main": "src/cursor-plugin.js",
-	"engines": {
-		"vscode": "^1.70.0"
-	},
-	"categories": [
-		"Other"
-	],
-	"activationEvents": [
-		"onStartupFinished",
-		"*"
-	],
-	"contributes": {
-		"commands": [
-			{
-				"command": "_extensionClient.toolCall",
-				"title": "Execute Tool Call",
-				"category": "Cursor"
-			}
-		]
-	},
-	"scripts": {
-		"start": "node src/server/index.js",
-		"dev": "nodemon src/server/index.js",
-		"package": "vsce package --no-dependencies",
-		"install-extension": "mkdir -p ~/.cursor/extensions/cursor-pocket-agent && cp -r src/* ~/.cursor/extensions/cursor-pocket-agent/"
-	},
-	"dependencies": {
-		"express": "^4.18.2",
-		"socket.io": "^4.7.2",
-		"socket.io-client": "^4.7.2",
-		"cors": "^2.8.5",
-		"dotenv": "^16.3.1"
-	},
-	"devDependencies": {
-		"nodemon": "^3.0.2",
-		"@types/vscode": "^1.70.0",
-		"vsce": "^2.15.0",
-		"vscode": "^1.1.37"
-	}
+  "name": "cursor-pocket-agent",
+  "displayName": "Pocket Agent",
+  "version": "1.0.0",
+  "description": "Mobile interface for Cursor's composer",
+  "publisher": "cursor-tools",
+  "icon": "icon.png",
+  "main": "src/cursor-plugin.js",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "_extensionClient.toolCall",
+        "title": "Execute Tool Call",
+        "category": "Cursor"
+      },
+      {
+        "command": "pocketAgent.readChatText",
+        "title": "Pocket Agent: Read Chat Text",
+        "category": "Pocket Agent"
+      }
+    ]
+  },
+  "scripts": {
+    "start": "node src/server/index.js",
+    "dev": "nodemon src/server/index.js",
+    "package": "vsce package",
+    "install-extension": "vsce package -o ./cursor-pocket-agent.vsix && cursor --install-extension ./cursor-pocket-agent.vsix --force && rm ./cursor-pocket-agent.vsix"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.2",
+    "socket.io": "^4.7.2",
+    "socket.io-client": "^4.7.2",
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.70.0",
+    "nodemon": "^3.0.2",
+    "vsce": "^2.15.0",
+    "vscode": "^1.1.37"
+  }
 }

@@ -23,7 +23,7 @@ npm start
 ```
 
 3. Access the mobile interface:
-   - Open `http://YOUR_COMPUTER_IP:3000` on your mobile device
+   - Open `http://YOUR_COMPUTER_IP:3300` on your mobile device
    - Replace `YOUR_COMPUTER_IP` with your computer's local IP address
    - Make sure your mobile device is on the same network as your computer
 
