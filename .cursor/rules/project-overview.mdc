@@ -1,41 +1,40 @@
----
-description:
-globs:
-alwaysApply: false
----
 # Project Overview
 
-This project is a VS Code extension called "Pocket Agent" that provides a mobile interface for Cursor's composer and a web interface to view the captured chat.
+This project is a VS Code extension called "Pocket Agent" that provides a web interface to view captured Cursor chat data and send messages back to Cursor windows.
 
 ## Key Components
 
--   **VS Code Extension**: [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js) - Main entry point for the extension. Captures chat data from Cursor.
--   **Express Backend Server**: [`src/server/index.js`](mdc:src/server/index.js) - Receives chat data, serves a web view of the chat, and handles WebSocket connections.
+-   **VS Code Extension**: [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js) - Main entry point for the extension. Captures chat data from Cursor windows using CDP, sends it to the backend server, and receives messages from the server to type back into Cursor.
+-   **Express Backend Server**: [`src/server/index.js`](mdc:src/server/index.js) - Receives chat data, serves a tabbed web view of the chats, and relays messages from the web view to the extension via WebSockets.
 -   **Package Definition**: [`package.json`](mdc:package.json) - Extension metadata and dependencies.
+-   **Standalone Test Script**: [`test-type-in-cursor.js`](mdc:test-type-in-cursor.js) - A Node.js script for testing the CDP-based typing functionality directly against a Cursor window, without needing the full extension and server.
+-   **Styling for Web View**: [`pocket-chat.css`](mdc:pocket-chat.css) - Main CSS file for styling the chat content in the web view to mimic Cursor's appearance.
 -   **Chat HTML Snapshot (Example)**: [`html`](mdc:html) - An example of the HTML structure captured from Cursor's chat panel, used for styling reference.
 
 ## Core Functionality
 
 ### Extension ([`src/cursor-plugin.js`](mdc:src/cursor-plugin.js))
-1.  **CDP Interaction**: Connects to Cursor's debug port (default: `9223`, configurable via `CURSOR_DEBUG_PORT`) using Chrome DevTools Protocol.
-2.  **Chat Content Extraction**: Periodically (default: `5000ms`, configurable via `POCKET_AGENT_POLL_INTERVAL`) polls Cursor's chat panel, specifically extracting the `outerHTML` of the `div.pane-body div.conversations` element.
-3.  **Data Transmission**: Sends the extracted HTML content as a JSON payload to the `/chat-update` endpoint of the backend server.
-4.  **Logging**: Provides output logging to both the console and a dedicated "Pocket Agent" VS Code output channel.
+1.  **CDP Interaction**: Connects to Cursor's debug port (default: `9223`, configurable via `CURSOR_DEBUG_PORT`) using Chrome DevTools Protocol (CDP).
+2.  **Chat Content Extraction**: Periodically (default: `5000ms`, configurable via `POCKET_AGENT_POLL_INTERVAL`) polls all active Cursor windows, extracting the `outerHTML` of their chat containers and their `webSocketDebuggerUrl` as a unique ID.
+3.  **Data Transmission to Server**: Sends the extracted HTML, name, and ID for each chat window as a JSON payload to the `/chat-update` endpoint of the backend server.
+4.  **Receiving and Typing Messages**: Listens for `sendMessageToWindow` Socket.IO events from the server. Upon receiving one, it uses CDP to connect to the specified window ID, click input elements if necessary, focus the chat input, type the message, and simulate Enter.
+5.  **Logging**: Provides output logging to a dedicated "Pocket Agent" VS Code output channel.
 
 ### Server ([`src/server/index.js`](mdc:src/server/index.js))
-1.  **Data Reception**: Receives chat HTML from the extension at `/chat-update` and stores the latest version in memory.
-2.  **Chat Web View**:
-    *   Serves a page at `/view-chat` that displays the captured chat content.
-    *   Uses an iframe pointing to `/get-chat-html`.
-    *   The `/get-chat-html` route injects custom CSS styles (mimicking Cursor's UI) along with the chat HTML. This styling approach is detailed in [`chat-styling-strategy.mdc`](mdc:.cursor/rules/chat-styling-strategy.mdc).
-3.  **WebSocket Server**: Implements a Socket.IO server for potential real-time communication with other clients (e.g., a mobile app).
-4.  **Static Files**: Serves static client assets from [`src/client/`](mdc:src/client).
+1.  **Data Reception & Storage**: Receives chat data at `/chat-update` and stores it in memory (`activeConversationsStore`).
+2.  **Tabbed Chat Web View (`/view-chat`)**: Serves a main HTML page that dynamically creates tabs for each active conversation. Each tab loads its content via an iframe.
+3.  **Individual Chat Content & Input (`/get-chat-html`)**: Serves the HTML for a single chat conversation (for iframes), including the chat messages and a message input form (textarea and send button).
+4.  **Message Relaying (`/send-to-cursor`)**: Receives messages submitted from the web view's input form. It then emits a `sendMessageToWindow` Socket.IO event, including the target window ID and message text, to the connected VS Code extension.
+5.  **WebSocket Server**: Uses Socket.IO for real-time communication between the server, the web view (for tab updates), and the VS Code extension (for relaying messages).
+6.  **Static Files**: Serves static client assets from [`src/client/`](mdc:src/client) and CSS from the project root.
 
 ## Configuration (Environment Variables for Extension)
 -   `POCKET_AGENT_SERVER_URL`: Backend server URL (default: `http://localhost:3300`).
 -   `CURSOR_DEBUG_PORT`: Debug port for CDP (default: `9223`).
 -   `POCKET_AGENT_POLL_INTERVAL`: Interval for polling chat updates (default: `5000ms`).
 
-## Related Workflows
--   Extension data capture: [`extension-workflow.mdc`](mdc:.cursor/rules/extension-workflow.mdc)
--   Server data handling and view: [`server-workflow.mdc`](mdc:.cursor/rules/server-workflow.mdc)
+## Related Workflows & Rules
+-   Extension Workflow Details: [pocket-agent-extension-workflow.mdc](mdc:.cursor/rules/pocket-agent-extension-workflow.mdc)
+-   Server Workflow Details: [server-workflow.mdc](mdc:.cursor/rules/server-workflow.mdc)
+-   Testing Typing Functionality: [pocket-agent-testing.mdc](mdc:.cursor/rules/pocket-agent-testing.mdc)
+-   Chat Styling Strategy (Reference): [chat-styling-strategy.mdc](mdc:.cursor/rules/chat-styling-strategy.mdc) *(Note: This rule might need review/creation based on current styling)*

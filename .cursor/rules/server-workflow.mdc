@@ -1,28 +1,51 @@
----
-description:
-globs:
-alwaysApply: false
----
-# Server Workflow: Chat Viewing
+# Server Workflow: Chat Viewing and Interaction
 
-This rule describes how the Express backend server handles and displays the captured chat data.
+This rule describes how the Express backend server ([`src/server/index.js`](mdc:src/server/index.js)) handles, displays captured chat data, and facilitates sending messages back to Cursor.
 
 ## Core File
 - Main server logic: [`src/server/index.js`](mdc:src/server/index.js)
 
-## Process
-1.  **Receive Chat Data**:
-    *   The server listens for POST requests on the `/chat-update` endpoint.
-    *   It expects a JSON payload containing `htmlContent` (the raw HTML of the chat from the extension).
-    *   The received `htmlContent` is stored in an in-memory variable `latestChatHtml`.
-2.  **Serve Chat View Page**:
-    *   A GET request to `/view-chat` serves a basic HTML page.
-    *   This page contains an iframe whose `src` is set to `/get-chat-html`.
-    *   The iframe is sandboxed (`sandbox="allow-same-origin allow-scripts"`).
-3.  **Provide Styled Chat Content**:
-    *   A GET request to `/get-chat-html` (typically from the iframe) is responsible for sending the actual chat content.
-    *   This endpoint prepends a `<style>` block containing CSS rules to the `latestChatHtml`.
-    *   The CSS rules are specifically crafted to mimic the appearance of the Cursor/VS Code chat interface, targeting known class names and HTML structures extracted from the chat.
-    *   The combined CSS and HTML string is then sent as the response.
-4.  **Static Client Files**: The server also serves static files from [`src/client/`](mdc:src/client).
-5.  **WebSocket Communication**: The server sets up Socket.IO for real-time communication, potentially with desktop and mobile clients, though this is separate from the `/view-chat` HTML rendering.
+## Key Workflows
+
+### 1. Receiving and Storing Chat Data
+*   **Endpoint**: `POST /chat-update`
+*   **Payload from Extension**: Expects a JSON payload: `{ conversations: [{ html: String, name: String, id: String }], source: String, timestamp: String }`.
+    *   `id` is the `webSocketDebuggerUrl` of the Cursor window, crucial for targeting messages back.
+*   **Storage**: The server stores the received `conversations` array in an in-memory variable `activeConversationsStore`.
+*   **Real-time Update**: Emits a `conversationsUpdated` Socket.IO event with `{ id, name }` for each conversation, allowing the `/view-chat` page to dynamically update its tab structure.
+*   **Backward Compatibility**: Includes logic to handle older payload formats (single `htmlContent` string or `htmlContents` array) for a transitional period, assigning them generated IDs.
+
+### 2. Serving the Tabbed Chat View Page
+*   **Endpoint**: `GET /view-chat`
+*   **Functionality**: Serves an HTML page that acts as the main container for viewing chats.
+*   **Tab Structure**: Dynamically generates tabs based on the `activeConversationsStore`.
+    *   Client-side JavaScript within this page listens for `conversationsUpdated` Socket.IO events to re-render tabs if the available chats change.
+*   **Iframes for Content**: Each tab, when selected, loads its specific chat content into an iframe.
+    *   The iframe's `src` points to `/get-chat-html?id=<conversation_id>`.
+
+### 3. Providing Styled Chat Content and Input Form (for Iframes)
+*   **Endpoint**: `GET /get-chat-html?id=<conversation_id>`
+*   **Functionality**: Serves the full HTML content for a single chat conversation, intended to be displayed within an iframe on the `/view-chat` page.
+*   **Content Includes**:
+    1.  A link to global styles [`pocket-chat.css`](mdc:pocket-chat.css).
+    2.  Inline CSS for layout, scrolling, and theming (mimicking VS Code/Cursor).
+    3.  The actual chat `html` for the requested `conversation_id` from `activeConversationsStore`.
+    4.  **Message Input Form**: A `div.message-input-area` containing a `textarea` and a "Send" button.
+    5.  **Client-side JavaScript**: Embedded script to:
+        *   Handle auto-resizing of the textarea.
+        *   Capture form submission (button click or Enter key in textarea).
+        *   Send the message text and the `conversation.id` (as `windowId`) via a `POST` request to `/send-to-cursor`.
+
+### 4. Relaying Messages from Web View to VS Code Extension
+*   **Endpoint**: `POST /send-to-cursor`
+*   **Payload from Web View**: Expects JSON: `{ windowId: String, messageText: String }`.
+    *   `windowId` is the `id` of the target Cursor chat window (originally its `webSocketDebuggerUrl`).
+*   **Action**: Upon receiving a valid payload, the server emits a `sendMessageToWindow` Socket.IO event with the `windowId` and `messageText`.
+*   **Recipient**: This event is intended to be picked up by the connected VS Code extension instance (`src/cursor-plugin.js`), which will then use CDP to type the message into the specified Cursor window.
+
+### 5. Serving Static Files
+*   Serves static files from [`src/client/`](mdc:src/client) and the project root (e.g., for [`pocket-chat.css`](mdc:pocket-chat.css)).
+
+### 6. General WebSocket Communication
+*   The server initializes a Socket.IO instance for real-time communication.
+*   Besides `conversationsUpdated` and `sendMessageToWindow`, it logs client connections/disconnections and handles basic registration events (though the primary chat update and message sending rely on specific HTTP endpoints and targeted Socket.IO emits).

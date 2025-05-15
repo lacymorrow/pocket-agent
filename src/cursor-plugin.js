@@ -4,8 +4,11 @@ const WebSocket = require('ws'); // Added for WebSocket communication
 
 // This should ideally come from a configuration or environment variable
 // Ensure this URL matches where your src/server/index.js is running
-const SERVER_URL = process.env.POCKET_AGENT_SERVER_URL || 'http://localhost:3300';
+const SERVER_URL = process.env.POCKET_AGENT_SERVER_URL || 'https://pocket-agent.vercel.app/';
 const CURSOR_DEBUG_PORT = process.env.CURSOR_DEBUG_PORT || 9223; // Make debug port configurable
+// const POCKET_AGENT_USER_ID = process.env.POCKET_AGENT_USER_ID || null; // User ID for authentication (old way)
+
+let pocketAgentUserId; // Will be populated from settings or env var
 
 let socket; // For connection to backend server
 let chatPollInterval;
@@ -26,20 +29,17 @@ async function getWebSocketDebuggerUrlJs() {
         const response = await fetch(targetUrl);
         if (!response.ok) {
             logError(`Pocket Agent: Cursor debug port (${CURSOR_DEBUG_PORT}) not accessible. Status: ${response.status} ${response.statusText}. Ensure Cursor is started with --remote-debugging-port=${CURSOR_DEBUG_PORT}.`);
-            vscode.window.showErrorMessage(`Pocket Agent: Cursor debug port (${CURSOR_DEBUG_PORT}) not accessible. Check console.`);
             return []; // Return empty array on failure
         }
         const targets = await response.json();
         if (!targets || targets.length === 0) {
             logError('Pocket Agent: No Cursor windows found on debug port.');
-            vscode.window.showErrorMessage('Pocket Agent: No Cursor windows found on debug port.');
             return []; // Return empty array
         }
 
         const pageTargets = targets.filter(t => t.type === 'page');
         if (pageTargets.length === 0) {
             logError(`Pocket Agent: No 'page' type targets found on port ${CURSOR_DEBUG_PORT}. Available targets: ${JSON.stringify(targets)}`);
-            vscode.window.showErrorMessage('Pocket Agent: No suitable Cursor debug targets found.');
             return []; // Return empty array
         }
 
@@ -69,7 +69,6 @@ async function getWebSocketDebuggerUrlJs() {
 
         if (selectedTargets.length === 0) {
             logError(`Pocket Agent: Could not select any suitable 'page' target with a webSocketDebuggerUrl. Available pages: ${JSON.stringify(pageTargets)}`);
-            vscode.window.showErrorMessage('Pocket Agent: Could not determine any Cursor debug WebSocket URL.');
             return [];
         }
 
@@ -79,12 +78,17 @@ async function getWebSocketDebuggerUrlJs() {
             return [];
         }
 
-        log(`Pocket Agent: Returning ${debuggerUrls.length} debugger URLs.`);
-        return debuggerUrls;
+        const result = selectedTargets.map(t => ({
+            url: t.webSocketDebuggerUrl,
+            title: t.title || t.url || 'Untitled Page' // Capture title
+        })).filter(t => !!t.url);
+
+        log(`Pocket Agent: Returning ${result.length} debugger targets with URLs and titles.`);
+        result.forEach(r => log(`  - URL: ${r.url}, Title: ${r.title}`));
+        return result;
 
     } catch (error) {
         logError('Pocket Agent: Error fetching Cursor debug targets:', error);
-        vscode.window.showErrorMessage(`Pocket Agent: Error connecting to Cursor debug port: ${error.message}`);
         return []; // Return empty array on error
     }
 }
@@ -260,30 +264,190 @@ async function fetchChatHtmlFromDebuggerUrl(debuggerUrl) {
  */
 async function readChatTextLogicJs() {
     log('Pocket Agent: Executing readChatTextLogicJs to fetch chat content from all relevant Cursor windows.');
-    const debuggerUrls = await getWebSocketDebuggerUrlJs(); // This now returns an array
+    const debuggerTargets = await getWebSocketDebuggerUrlJs(); // Now returns [{ url, title }]
 
-    if (!debuggerUrls || debuggerUrls.length === 0) {
-        log('Pocket Agent: No debugger URLs found to fetch chat content from.');
-        return []; // Return an empty array if no URLs
+    if (!debuggerTargets || debuggerTargets.length === 0) {
+        log('Pocket Agent: No debugger targets found to fetch chat content from.');
+        return []; // Return an empty array if no targets
     }
 
-    log(`Pocket Agent: Found ${debuggerUrls.length} debugger URLs to process.`);
-    const allChatHtmls = [];
+    log(`Pocket Agent: Found ${debuggerTargets.length} debugger targets to process.`);
+    const allConversationsData = [];
 
-    for (const url of debuggerUrls) {
+    for (const target of debuggerTargets) {
         try {
-            const chatHtml = await fetchChatHtmlFromDebuggerUrl(url);
-            allChatHtmls.push(chatHtml); // chatHtml can be null if not found or error
+            const chatHtml = await fetchChatHtmlFromDebuggerUrl(target.url);
+            // Only add if HTML is successfully fetched
+            if (chatHtml !== null && typeof chatHtml === 'string') {
+                let conversationName = target.title || 'Untitled Chat';
+                if (target.title && target.title.includes(' — ')) {
+                    conversationName = target.title.split(' — ').pop().trim();
+                }
+                // If after splitting, the name is empty or just whitespace, fallback
+                if (!conversationName || conversationName.trim() === '') {
+                    conversationName = target.title || 'Untitled Chat'; // Fallback to full title if split fails
+                }
+
+                allConversationsData.push({
+                    html: chatHtml,
+                    name: conversationName,
+                    id: target.url
+                });
+            } else {
+                 // Optionally log if a specific target yielded no HTML but was processed
+                log(`Pocket Agent: No chat HTML retrieved or invalid format from target: ${target.title} (${target.url})`);
+            }
         } catch (error) {
-            logError(`Pocket Agent: Error processing debugger URL ${url} in readChatTextLogicJs:`, error);
-            allChatHtmls.push(null); // Push null in case of unexpected error during the fetch call itself
+            logError(`Pocket Agent: Error processing debugger target ${target.url} (Title: ${target.title}) in readChatTextLogicJs:`, error);
+            // Do not push nulls here; instead, we filter for valid objects later or handle missing HTML upfront.
         }
     }
 
-    log(`Pocket Agent: Finished processing all debugger URLs. Returning ${allChatHtmls.length} results.`);
-    return allChatHtmls;
+    log(`Pocket Agent: Finished processing all debugger targets. Returning ${allConversationsData.length} valid conversation data entries.`);
+    return allConversationsData; // Returns array of { html, name, id }
 }
 
+/**
+ * Sends a message to a specific Cursor window using CDP.
+ * @param {string} windowId The WebSocket debugger URL of the target window.
+ * @param {string} messageText The text to send.
+ */
+async function sendMessageToCursorWindow(windowId, messageText) {
+    if (!windowId || typeof windowId !== 'string') {
+        logError('Pocket Agent: sendMessageToCursorWindow called with invalid windowId.', windowId);
+        return;
+    }
+    if (typeof messageText !== 'string') {
+        logError('Pocket Agent: sendMessageToCursorWindow called with invalid messageText.', messageText);
+        return;
+    }
+
+    log(`Pocket Agent: Attempting to send message to window: ${windowId}`);
+    let cdpWs;
+    try {
+        cdpWs = new WebSocket(windowId);
+        await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                logError(`Pocket Agent: CDP WebSocket connection timeout for ${windowId} (sendMessageToCursorWindow)`);
+                reject(new Error(`CDP WebSocket connection timeout for ${windowId}`));
+            }, 5000); // 5s timeout for connection
+            cdpWs.on('open', () => {
+                clearTimeout(timeout);
+                log(`Pocket Agent: Connected to Cursor CDP WebSocket for ${windowId} (sendMessageToCursorWindow)`);
+                resolve();
+            });
+            cdpWs.on('error', (err) => {
+                clearTimeout(timeout);
+                logError(`Pocket Agent: Error connecting to Cursor CDP WebSocket for ${windowId} (sendMessageToCursorWindow):`, err);
+                reject(err);
+            });
+            cdpWs.on('close', (code, reason) => {
+                log(`Pocket Agent: CDP WebSocket closed for ${windowId} (sendMessageToCursorWindow). Code: ${code}, Reason: ${reason.toString()}`);
+                // Potentially reject if closed before operations complete, but usually handled by command timeouts
+            });
+        });
+
+        // Expression to find a suitable chat input textarea
+        const getChatInputObjectIdExpression = `
+            (() => {
+                const selectors = [
+                    'div.chat-input-widget textarea', // Common chat input
+                    '.aiprompt-editor textarea', // Cursor's main AI prompt input
+                    'div.pane-body.composite.panel div.chat-input-part textarea', // Chat input in a panel view
+                    'textarea[placeholder*="Send a message"]', // Generic fallback
+                    'textarea[aria-label*="Chat message input"]', // Accessibility
+                    'textarea[data-testid*="chat-input"]' // Test ID common in some frameworks
+                ];
+                for (const selector of selectors) {
+                    const el = document.querySelector(selector);
+                    // Check if element exists and is visible (offsetParent is not null)
+                    if (el && el.offsetParent !== null) {
+                        return el; // CDP will convert this to a RemoteObject
+                    }
+                }
+                return null; // No suitable input found
+            })()
+        `;
+
+        const evalResult = await sendCdpCommandJs(cdpWs, 'Runtime.evaluate', {
+            expression: getChatInputObjectIdExpression,
+            returnByValue: false, // We need the objectId
+            awaitPromise: true,
+            objectGroup: 'chatInputGroup' // For releasing later
+        });
+
+        if (!evalResult || !evalResult.result || evalResult.result.type === 'undefined' || !evalResult.result.objectId) {
+            logError(`Pocket Agent: Could not find chat input in window ${windowId}. Result:`, evalResult.result);
+            throw new Error('Chat input element not found in target window.');
+        }
+        const inputObjectId = evalResult.result.objectId;
+        log(`Pocket Agent: Found chat input ObjectId: ${inputObjectId} in ${windowId}`);
+
+        // Focus the input field
+        try {
+            await sendCdpCommandJs(cdpWs, 'Runtime.callFunctionOn', {
+                functionDeclaration: 'function() { this.focus(); }',
+                objectId: inputObjectId
+            }, 2000); // Shorter timeout for focus
+            log(`Pocket Agent: Focused chat input in ${windowId}`);
+        } catch (focusError) {
+             // DOM.focus needs a nodeId or backendNodeId, which is harder to get reliably from Runtime.evaluate
+            // Runtime.callFunctionOn with this.focus() is more direct with an objectId
+            logError(`Pocket Agent: Could not focus chat input using Runtime.callFunctionOn in ${windowId}:`, focusError);
+            // As a fallback, attempt to enable DOM and use DOM.focus if Runtime.callFunctionOn fails.
+            // This is more complex as it requires resolving objectId to nodeId.
+            // For now, we'll rely on Runtime.callFunctionOn.
+            throw new Error('Failed to focus chat input.');
+        }
+
+
+        // Insert the text
+        // Input.insertText is simpler and often works without explicit focus if the context is right,
+        // but focusing first is more robust.
+        await sendCdpCommandJs(cdpWs, 'Input.insertText', { text: messageText }, 5000);
+        log(`Pocket Agent: Inserted text into chat input in ${windowId}: "${messageText}"`);
+
+        // Simulate "Enter" key press to send the message
+        // For "Enter", we usually need keyDown, char, and keyUp
+        await sendCdpCommandJs(cdpWs, 'Input.dispatchKeyEvent', {
+            type: 'keyDown',
+            key: 'Enter',
+            code: 'Enter',
+            windowsVirtualKeyCode: 13,
+            nativeVirtualKeyCode: 13,
+            text: '\r' // Some systems might need text for keyDown Enter
+        }, 1000);
+        // Some applications might react to 'char' or just keyDown/keyUp.
+        // Sending 'char' is often important for text processing.
+        await sendCdpCommandJs(cdpWs, 'Input.dispatchKeyEvent', {
+            type: 'char',
+            text: '\r' // Or '\n', depending on the application
+        }, 1000);
+        await sendCdpCommandJs(cdpWs, 'Input.dispatchKeyEvent', {
+            type: 'keyUp',
+            key: 'Enter',
+            code: 'Enter',
+            windowsVirtualKeyCode: 13,
+            nativeVirtualKeyCode: 13
+        }, 1000);
+        log(`Pocket Agent: Simulated Enter key press in ${windowId}`);
+
+        // Release the object group
+        await sendCdpCommandJs(cdpWs, 'Runtime.releaseObjectGroup', { objectGroup: 'chatInputGroup' }, 1000);
+
+    } catch (error) {
+        logError(`Pocket Agent: Error sending message to window ${windowId}:`, error);
+        // Optionally, notify the user via vscode.window.showErrorMessage
+        // vscode.window.showErrorMessage(`Pocket Agent: Failed to send message to Cursor window: ${error.message}`);
+    } finally {
+        if (cdpWs && cdpWs.readyState === WebSocket.OPEN) {
+            log(`Pocket Agent: Closing Cursor CDP WebSocket for ${windowId} (sendMessageToCursorWindow).`);
+            cdpWs.close();
+        } else if (cdpWs) {
+            log(`Pocket Agent: Cursor CDP WebSocket for ${windowId} was already closed or not opened (sendMessageToCursorWindow).`);
+        }
+    }
+}
 
 // Existing function to parse chat (can be improved)
 function parseChatTextToStructuredData(chatText) {
@@ -293,7 +457,7 @@ function parseChatTextToStructuredData(chatText) {
         return messages;
     }
 
-    const lines = chatText.split('\\n').filter(line => line.trim() !== '');
+    const lines = chatText.split('\n').filter(line => line.trim() !== '');
     const lineRegex = /^(?:\[[^\]]+\]\s*)?([^:]+?)(?:\s*\[[^\]]+\])?:\s*(.*)$/;
 
     for (const line of lines) {
@@ -308,7 +472,7 @@ function parseChatTextToStructuredData(chatText) {
             });
         } else {
             if (messages.length > 0) {
-                messages[messages.length - 1].content += '\\n' + line.trim();
+                messages[messages.length - 1].content += '\n' + line.trim();
             } else {
                 messages.push({
                     sender: "System", // Or "Unknown"
@@ -340,48 +504,51 @@ async function fetchAndSendChatUpdate() {
 
     try {
         log('Fetching chat content from all relevant windows...');
-        const allChatHtmls = await readChatTextLogicJs(); // Returns an array of strings or nulls
+        const allConversationsData = await readChatTextLogicJs(); // Returns an array of {html, name} or empty
 
-        const validChatHtmls = allChatHtmls.filter(html => html !== null && typeof html === 'string');
+        // Filter out any entries where html might be null or not a string, though readChatTextLogicJs tries to prevent this.
+        const validConversationsData = allConversationsData.filter(
+            conv => conv && typeof conv.html === 'string' && typeof conv.name === 'string'
+        );
 
-        if (validChatHtmls.length > 0) {
-            log(`Found ${validChatHtmls.length} chat content(s) to send to server...`);
+        if (validConversationsData.length > 0) {
+            log(`Found ${validConversationsData.length} valid conversation(s) to send to server...`);
 
-            // For now, we'll send the first valid HTML found to maintain compatibility
-            // with the server, which expects a single htmlContent.
-            // TODO: Modify server to accept an array and then send validChatHtmls.
-            const firstChatHtml = validChatHtmls[0];
-            // To send all, the body would be:
-            // body: JSON.stringify({
-            //     htmlContents: validChatHtmls, // Array of HTML strings
-            //     source: 'vscode-extension',
-            //     timestamp: new Date().toISOString()
-            // })
-            // And the server would need to be updated to handle `htmlContents` array.
+            const payload = {
+                conversations: validConversationsData, // Array of {html, name} objects
+                source: 'vscode-extension',
+                timestamp: new Date().toISOString(),
+                userId: pocketAgentUserId // Include the User ID in the payload
+            };
+
+            if (!pocketAgentUserId) {
+                logError('Pocket Agent: User ID is not configured. Cannot send user-specific chat update. Please set it in VS Code settings (pocketAgent.userId) or via POCKET_AGENT_USER_ID environment variable.');
+                // vscode.window.showWarningMessage('Pocket Agent: User ID is not configured. Please set POCKET_AGENT_USER_ID.');
+                log('Pocket Agent: Warning message shown - User ID is not configured. Please set it in settings or env var.');
+                return; // Stop if no User ID is set, as the server would likely reject or misattribute it
+            }
+
+            log(`Pocket Agent: Sending payload to /chat-update. ${validConversationsData.length} conversation(s). User ID: ${pocketAgentUserId}. First conversation name: ${validConversationsData[0].name}`);
 
             const response = await fetch(`${SERVER_URL}/chat-update`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    htmlContent: firstChatHtml, // Sending only the first one for now
-                    source: 'vscode-extension',
-                    timestamp: new Date().toISOString()
-                })
+                body: JSON.stringify(payload)
             });
 
             if (response.ok) {
-                log('Chat HTML (first found) sent successfully to server.');
+                log(`Successfully sent ${validConversationsData.length} conversation(s) to server.`);
             } else {
                 const errorBody = await response.text();
                 logError('Failed to send chat update. Status:', errorBody);
-                vscode.window.showWarningMessage(`Pocket Agent: Failed to send chat update to server. Status: ${response.status}`);
+                // vscode.window.showWarningMessage(`Pocket Agent: Failed to send chat update to server. Status: ${response.status}`);
             }
         } else {
             log('No valid chat content found across all windows to send.');
         }
     } catch (error) {
         logError('Error fetching or sending chat update:', error);
-        vscode.window.showErrorMessage(`Pocket Agent: Error during chat update: ${error.message}`);
+        // vscode.window.showErrorMessage(`Pocket Agent: Error during chat update: ${error.message}`);
     }
 }
 
@@ -411,23 +578,43 @@ function activate(context) {
     };
 
     global.logError = (message, error) => {
-        console.error(message, error);
-        if (pocketAgentOutputChannel) {
-            pocketAgentOutputChannel.appendLine(`ERROR: ${message}`);
-            if (error && error.message) {
-                pocketAgentOutputChannel.appendLine(`  Details: ${error.message}`);
-            } else if (typeof error === 'string') {
-                 pocketAgentOutputChannel.appendLine(`  Details: ${error}`);
-            } else if (error) {
-                pocketAgentOutputChannel.appendLine(`  Details: ${JSON.stringify(error)}`);
+        let fullMessage = `ERROR: ${message}`;
+        if (error && error.message) {
+            fullMessage += ` Details: ${error.message}`;
+        } else if (typeof error === 'string') {
+            fullMessage += ` Details: ${error}`;
+        } else if (error) {
+            try {
+                fullMessage += ` Details: ${JSON.stringify(error)}`;
+            } catch (e) {
+                fullMessage += ` Details: (Unserializable error object)`;
             }
+        }
+        console.error(message, error); // Log original error object to console for better inspection
+        if (pocketAgentOutputChannel) {
+            pocketAgentOutputChannel.appendLine(fullMessage);
         } else {
-            console.warn('Pocket Agent: pocketAgentOutputChannel not ready for logError:', message);
+            console.warn('Pocket Agent: pocketAgentOutputChannel not ready for logError:', fullMessage);
         }
     };
 
     log("Pocket Agent: Entering activate function..."); // Now uses global log
     log('Pocket Agent: Activating extension...');
+
+    // Get User ID from settings, then environment variable as fallback
+    const config = vscode.workspace.getConfiguration('pocketAgent');
+    pocketAgentUserId = config.get('userId');
+
+    if (!pocketAgentUserId) {
+        pocketAgentUserId = process.env.POCKET_AGENT_USER_ID || null;
+        if (pocketAgentUserId) {
+            log('Pocket Agent: User ID loaded from POCKET_AGENT_USER_ID environment variable.');
+        } else {
+            log('Pocket Agent: User ID not found in VS Code settings or environment variable. Please configure pocketAgent.userId.');
+        }
+    } else {
+        log('Pocket Agent: User ID loaded from VS Code settings (pocketAgent.userId).');
+    }
 
     // Register the command to read chat text using CDP
     let readChatDisposable = vscode.commands.registerCommand('pocketAgent.readChatText', async () => {
@@ -441,6 +628,51 @@ function activate(context) {
     });
     context.subscriptions.push(readChatDisposable);
 
+    // Command to set User ID
+    let setUserIdDisposable = vscode.commands.registerCommand('pocketAgent.setUserId', async () => {
+        const newUserId = await vscode.window.showInputBox({
+            prompt: "Enter your Pocket Agent User ID",
+            placeHolder: "Your User ID (e.g., from the Pocket Agent web portal)",
+            value: pocketAgentUserId || '' // Show current ID if available
+        });
+
+        if (newUserId === undefined) {
+            log('Pocket Agent: Set User ID command cancelled by user.');
+            return; // User cancelled the input box
+        }
+
+        if (typeof newUserId === 'string' && newUserId.trim() !== '') {
+            try {
+                await vscode.workspace.getConfiguration('pocketAgent').update('userId', newUserId.trim(), vscode.ConfigurationTarget.Global);
+                pocketAgentUserId = newUserId.trim(); // Update the in-memory variable
+                log(`Pocket Agent: User ID updated to: ${pocketAgentUserId}`);
+                // vscode.window.showInformationMessage(`Pocket Agent User ID updated successfully to: ${pocketAgentUserId}`);
+                log('Pocket Agent: Information message shown - User ID updated successfully.');
+            } catch (error) {
+                logError('Pocket Agent: Failed to save User ID to settings:', error);
+                // vscode.window.showErrorMessage('Pocket Agent: Failed to save User ID. Check logs.');
+                log('Pocket Agent: Error message shown - Failed to save User ID. Check logs.');
+            }
+        } else if (newUserId.trim() === '') {
+            // User entered an empty string, potentially to clear it
+             try {
+                await vscode.workspace.getConfiguration('pocketAgent').update('userId', null, vscode.ConfigurationTarget.Global);
+                pocketAgentUserId = null; // Update the in-memory variable
+                log('Pocket Agent: User ID cleared from settings.');
+                // vscode.window.showInformationMessage('Pocket Agent User ID cleared.');
+                log('Pocket Agent: Information message shown - User ID cleared.');
+            } catch (error) {
+                logError('Pocket Agent: Failed to clear User ID from settings:', error);
+                // vscode.window.showErrorMessage('Pocket Agent: Failed to clear User ID. Check logs.');
+                log('Pocket Agent: Error message shown - Failed to clear User ID. Check logs.');
+            }
+        } else {
+            log('Pocket Agent: Invalid User ID entered.');
+            // vscode.window.showWarningMessage('Pocket Agent: Invalid User ID entered. It was not saved.');
+            log('Pocket Agent: Warning message shown - Invalid User ID entered. It was not saved.');
+        }
+    });
+    context.subscriptions.push(setUserIdDisposable);
 
     // Connect to the backend server
     log("Pocket Agent: Attempting to connect to backend server...");
@@ -455,7 +687,7 @@ function activate(context) {
     socket.on('connect', () => {
         log('Pocket Agent: Connected to WebSocket backend server at', SERVER_URL);
         try {
-            vscode.window.showInformationMessage('Pocket Agent connected to its backend server. Polling for chat updates.');
+            // vscode.window.showInformationMessage('Pocket Agent connected to its backend server. Polling for chat updates.');
             log('Pocket Agent: Information message shown.');
 
             if (chatPollInterval) {
@@ -482,7 +714,22 @@ function activate(context) {
 
         } catch (e) {
             logError('Pocket Agent: Error within socket.on("connect") handler:', e);
-            vscode.window.showErrorMessage('Pocket Agent: Critical error during connection setup. Chat polling may not start.');
+            // vscode.window.showErrorMessage('Pocket Agent: Critical error during connection setup. Chat polling may not start.');
+        }
+    });
+
+    socket.on('sendMessageToWindow', async (data) => {
+        if (data && data.windowId && data.messageText) {
+            log(`Pocket Agent: Received 'sendMessageToWindow' event. Window ID: ${data.windowId}, Message: "${data.messageText}"`);
+            try {
+                await sendMessageToCursorWindow(data.windowId, data.messageText);
+                log(`Pocket Agent: Successfully processed 'sendMessageToWindow' for Window ID: ${data.windowId}`);
+            } catch (error) {
+                logError(`Pocket Agent: Error executing sendMessageToCursorWindow from socket event for Window ID: ${data.windowId}:`, error);
+                // vscode.window.showErrorMessage(`Pocket Agent: Failed to send message to Cursor window via socket event: ${error.message}`);
+            }
+        } else {
+            logError('Pocket Agent: Received invalid data for sendMessageToWindow event:', data);
         }
     });
 
@@ -492,7 +739,7 @@ function activate(context) {
              // The server initiated the disconnect
             socket.connect(); // Attempt to reconnect manually if appropriate
         }
-        vscode.window.showWarningMessage('Pocket Agent lost connection to its backend server.');
+        log('Pocket Agent: Warning message shown - lost connection to backend server.');
         if (chatPollInterval) clearInterval(chatPollInterval);
     });
 
@@ -530,7 +777,8 @@ function activate(context) {
     log("Pocket Agent: After pushing main disposable, before final logs.");
 
     log('Pocket Agent: Extension activation complete.');
-    vscode.window.showInformationMessage('Pocket Agent Activated. Ensure Cursor is running with --remote-debugging-port=9223.');
+    // vscode.window.showInformationMessage('Pocket Agent Activated. Ensure Cursor is running with --remote-debugging-port=9223.');
+    log('Pocket Agent: Information message shown - Pocket Agent Activated. Ensure Cursor is running with --remote-debugging-port=9223 and User ID is configured.');
 }
 
 function deactivate() {

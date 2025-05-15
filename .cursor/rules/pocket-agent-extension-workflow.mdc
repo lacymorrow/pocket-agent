@@ -1,0 +1,113 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Pocket Agent Extension Workflow
+
+This document outlines the architecture, core workflow, and communication flow of the Pocket Agent VS Code extension, primarily managed by [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js).
+
+## 1. Overview & Architecture
+
+The extension interfaces with Cursor IDE windows via the Chrome DevTools Protocol (CDP) and communicates with a backend server ([`src/server/index.js`](mdc:src/server/index.js)) using HTTP and Socket.IO. It also provides feedback to the user through the VS Code UI (Output Channel and notifications).
+
+### Key Architectural Components:
+*   **CDP Interaction**: For reading data from and sending commands (like typing) to Cursor windows.
+*   **HTTP/Socket.IO Client**: For sending captured chat data to the backend and receiving commands from it.
+*   **Polling Mechanism**: To periodically fetch chat updates.
+*   **Logging**: To provide operational insights and debug information.
+*   **VS Code API Integration**: For user notifications and output channel management.
+
+## 2. Core Functionalities & Workflow Steps
+
+### 2.1. Connection to Cursor Debug Port
+*   The extension attempts to find active Cursor windows by querying `http://localhost:CURSOR_DEBUG_PORT/json/list` (default port `9223`, configurable via `CURSOR_DEBUG_PORT` environment variable).
+*   It filters for `page` type targets, prioritizing `workbench.html` pages, to get their `webSocketDebuggerUrl`. This URL serves as the unique `id` for each chat window.
+*   Relevant function: `getWebSocketDebuggerUrlJs()`.
+
+### 2.2. Chat Content Extraction (Polling)
+*   At a configurable interval (`POCKET_AGENT_POLL_INTERVAL`, default `5000ms`), the extension fetches chat content from all identified Cursor windows.
+*   For each window, it connects via its `webSocketDebuggerUrl` using CDP.
+*   It evaluates JavaScript (`evaluateJavascriptInPageJs()`) in the target page to extract the `outerHTML` of the chat container (typically `div.pane-body div.conversations`).
+*   Relevant functions: `readChatTextLogicJs()`, `fetchChatHtmlFromDebuggerUrl()`.
+
+### 2.3. Data Transmission to Server
+*   The extracted chat data (HTML, window name, and window `id`) from all windows is compiled into a JSON payload: `{ conversations: [{html, name, id}], source, timestamp }`.
+*   This payload is sent via an HTTP POST request to the `/chat-update` endpoint of the backend server (URL configurable via `POCKET_AGENT_SERVER_URL`, default `http://localhost:3300`).
+*   Relevant function: `fetchAndSendChatUpdate()`.
+
+### 2.4. Receiving Messages from Server to Type into Cursor
+*   The extension maintains a persistent Socket.IO connection to the backend server.
+*   It listens for a `sendMessageToWindow` event from the server. This event carries a `windowId` (the `webSocketDebuggerUrl` of the target Cursor window) and `messageText`.
+*   Upon receiving this event, the `sendMessageToCursorWindow()` function is invoked.
+
+### 2.5. Typing Messages into Cursor via CDP
+*   The `sendMessageToCursorWindow()` function is the core of this capability:
+    *   Connects to the target Cursor window using its `windowId` (CDP WebSocket).
+    *   Enables necessary CDP domains: `Page`, `DOM`, `Runtime`.
+    *   Queries the DOM using a list of selectors (e.g., `.aislash-editor-input`, `.aiprompt-editor textarea`) to find the chat input element's `nodeId`.
+    *   **Click Interaction**: If the identified input is `.aislash-editor-input` (a common pattern for rich text inputs), it first dispatches a mouse click event to ensure the element is active and ready for input.
+    *   Focuses the input element using `DOM.focus` and scrolls it into view using `DOM.scrollIntoViewIfNeeded`.
+    *   Inserts the `messageText` using `Input.insertText`.
+    *   Simulates an "Enter" key press using `Input.dispatchKeyEvent` (a sequence of keyDown, char, keyUp events) to submit the message.
+*   Helper function for all CDP communication: `sendCdpCommandJs()`.
+
+## 3. Communication Flow
+
+The extension facilitates a multi-point communication flow:
+
+```
++------------------+       +-----------------------+       +----------------+
+|                  |       |                       |       |                |
+|  Cursor Editor   | <====>|  Pocket Agent         | <====>| Backend Server |
+| (CDP Debug Port) |       |  (VS Code Extension)  |       | (HTTP/Socket.IO) |
+|                  |       |                       |       |                |
++------------------+       +-----------------------+       +----------------+
+                                      ^
+                                      |
+                                      v
+                              +----------------+
+                              |                |
+                              |  VS Code UI    |
+                              | (Output, Notif)|
+                              |                |
+                              +----------------+
+```
+
+**Data Flow Sequence Summary:**
+
+1.  **Cursor to Extension (Chat Capture)**:
+    *   Extension uses CDP to connect to Cursor windows.
+    *   JavaScript is evaluated in Cursor pages via CDP to extract chat `outerHTML`.
+2.  **Extension to Backend Server (Chat Update)**:
+    *   Captured chat HTML (along with window name and ID) is sent as JSON via HTTP POST to the server's `/chat-update` endpoint.
+3.  **Backend Server to Extension (Send Message Command)**:
+    *   The server, after receiving a request from its web UI (e.g., `/send-to-cursor` endpoint), emits a `sendMessageToWindow` event over Socket.IO to the extension.
+4.  **Extension to Cursor (Type Message)**:
+    *   The extension receives the `sendMessageToWindow` event.
+    *   It uses CDP to connect to the specified Cursor window, find the input field, click if necessary, focus, type the message, and simulate Enter.
+5.  **Extension to VS Code UI (Logging/Feedback)**:
+    *   The extension writes operational logs to a dedicated "Pocket Agent" output channel.
+    *   It uses VS Code notifications for important status updates (e.g., connection success/failure).
+
+## 4. Logging
+
+*   The extension creates and utilizes a dedicated VS Code Output panel channel named "Pocket Agent" for detailed operational logging.
+*   Global `log()` and `logError()` functions (defined in `activate()` within [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js)) are used throughout the extension. These functions append messages to both the debug console and the "Pocket Agent" output channel.
+
+## 5. Activation & Deactivation (Lifecycle)
+
+*   **Activation (`activate()` function)**: This is the main entry point when the extension starts.
+    *   Initializes the "Pocket Agent" output channel.
+    *   Sets up the global `log` and `logError` functions.
+    *   Registers VS Code commands (e.g., `pocketAgent.readChatText` for manual fetch, `pocketAgent.manualChatFetch`).
+    *   Establishes the Socket.IO connection to the backend server.
+    *   Sets up event listeners for this Socket.IO connection (`connect`, `disconnect`, `connect_error`, `sendMessageToWindow`).
+    *   Once connected to the server, it starts the polling interval (`chatPollInterval`) that repeatedly calls `fetchAndSendChatUpdate()`.
+    *   Triggers an initial call to `fetchAndSendChatUpdate()`.
+*   **Deactivation (`deactivate()` function)**: Called when the extension is being shut down.
+    *   Clears the `chatPollInterval`.
+    *   Disconnects the Socket.IO client.
+    *   The output channel is automatically disposed of by VS Code as it's registered in `context.subscriptions`.
+
+This consolidated rule provides a comprehensive overview of the extension's design and operational flow.
