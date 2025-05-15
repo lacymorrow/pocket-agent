@@ -1,0 +1,400 @@
+/* Pocket Agent Chat Interface CSS */
+
+/* Base styles */
+:root {
+  --vscode-editor-background: rgb(30, 31, 28);
+  --vscode-editor-foreground: #d4d4d4;
+  --vscode-input-background: #3c3c3c;
+  --vscode-input-foreground: #cccccc;
+  --vscode-input-placeholderForeground: #888888;
+  --vscode-input-border: #3c3c3c;
+  --vscode-textLink-foreground: #3794ff;
+  --vscode-textCodeBlock-background: #1e1e1e;
+  --vscode-foreground: #cccccc;
+  --vscode-charts-blue: #3794ff;
+  --vscode-editorWidget-border: #303030;
+  --vscode-terminal-ansiBlue: #3794ff;
+  --vscode-descriptionForeground: #a0a0a0;
+  --monaco-monospace-font: "SF Mono", Monaco, Menlo, Consolas, "Ubuntu Mono", "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace;
+}
+
+/* Core container styles */
+.conversations {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 20px; /* Add padding inside the conversation area */
+  flex: 1 1 0%;
+  min-height: 0px;
+  width: 100%;
+  background: rgb(30, 31, 28);
+  overflow-y: auto; /* Enable vertical scrolling */
+  box-sizing: border-box;
+}
+
+.monaco-scrollable-element {
+  position: relative;
+  overflow-y: hidden;
+  width: 100%;
+  height: unset;
+}
+
+/* Message bubbles */
+.hide-if-empty {
+  display: block;
+  outline: none;
+  padding: 0.4rem 18px 0px;
+  opacity: 1;
+  position: relative;
+}
+
+/* Individual message bubbles */
+div[id^="bubble-"] {
+  margin-bottom: 0.5rem;
+  padding: 0.2rem 0;
+}
+
+/* Markdown container */
+.anysphere-markdown-container-root {
+  user-select: text;
+  font-size: 1em;
+  line-height: 1.5;
+  color: var(--vscode-editor-foreground);
+  padding: 0;
+  border-radius: 5px;
+  max-width: 95%;
+  box-sizing: border-box;
+}
+
+/* Markdown sections */
+.markdown-section {
+  border-radius: 4px;
+  margin: 6px 0;
+  position: relative;
+  scroll-margin-bottom: 40px;
+  scroll-margin-top: 40px;
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+.anysphere-markdown-container-root section.markdown-section:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-section h1, .markdown-section h2, .markdown-section h3 {
+  font-weight: 600 !important;
+}
+
+.markdown-section h1 {
+  font-size: 1.6em;
+  line-height: 1.25;
+  margin-bottom: 12px;
+  margin-top: 24px;
+}
+
+.markdown-section h2 {
+  font-size: 1.3em;
+  line-height: 1.25;
+  margin-bottom: 10px;
+  margin-top: 20px;
+}
+
+.markdown-section h3 {
+  font-size: 1.15em;
+  line-height: 1.25;
+  margin-bottom: 8px;
+  margin-top: 18px;
+}
+
+.markdown-section h4 {
+  font-size: 1.05em;
+  line-height: 1.25;
+  margin-bottom: 8px;
+  margin-top: 16px;
+}
+
+.markdown-section hr {
+  background-color: var(--vscode-dropdown-border) !important;
+  border: none;
+  height: 1px;
+  margin: 16px 0;
+}
+
+/* Code styling */
+.markdown-section .markdown-inline-code {
+  background-color: color-mix(in srgb, var(--vscode-textCodeBlock-background) 80%, var(--vscode-input-placeholderForeground));
+  border-radius: 4px;
+  color: var(--vscode-textPreformat-foreground);
+  font-family: var(--monaco-monospace-font);
+  font-size: 0.9em;
+  padding: 1.5px 3px;
+  transition: all 0.1s ease;
+  word-break: break-all; /* Allow breaking long inline code */
+}
+
+.markdown-section .markdown-inline-code[style*="cursor: pointer"] {
+  background-color: var(--vscode-textCodeBlock-background);
+  border-color: var(--vscode-textLink-foreground);
+  color: var(--vscode-textLink-foreground);
+}
+
+.markdown-section .markdown-inline-code[style*="cursor: pointer"]:hover {
+  background-color: color-mix(in srgb, var(--vscode-textLink-foreground) 10%, var(--vscode-textCodeBlock-background));
+}
+
+/* Human message styles */
+.composer-human-message {
+  align-self: flex-end;
+  background-color: var(--vscode-input-background);
+  border: 1px solid color-mix(in srgb, var(--vscode-input-border) 60%, transparent);
+  border-radius: 0.5rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  position: relative;
+  transition: background-color 0.1s ease-in-out, border 0.1s ease-in-out;
+  width: 100%;
+  padding: 8px 12px;
+  margin-left: auto; /* Align to the right */
+  max-width: 80%;
+  word-wrap: break-word;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.composer-human-message:hover {
+  background-color: color-mix(in srgb, var(--vscode-input-background) 96%, var(--vscode-editor-foreground)) !important;
+  border: 1px solid color-mix(in srgb, var(--vscode-input-border) 60%, color-mix(in srgb, var(--vscode-editor-foreground) 10%, transparent));
+}
+
+.composer-human-message .aislash-editor-input-readonly p {
+  margin: 0;
+  color: var(--vscode-input-foreground) !important;
+  line-height: 1.6;
+}
+
+/* Context pill styles */
+.context-pill {
+  transition: opacity 0.2s;
+  position: relative;
+  cursor: pointer;
+  border-style: solid;
+  opacity: 1;
+}
+
+.context-pill-default {
+  background-color: transparent;
+}
+
+/* Markdown links */
+.markdown-link {
+  text-decoration: var(--text-link-decoration);
+}
+
+.markdown-link:hover {
+  text-decoration: underline !important;
+}
+
+/* Link styling */
+a {
+  color: var(--vscode-textLink-foreground, #3794ff);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Codicon styles */
+.codicon {
+  font-family: codicon;
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  display: inline-block;
+  text-align: center;
+  vertical-align: text-bottom;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Input styles */
+.aislash-editor-input-readonly {
+  resize: none;
+  grid-area: 1 / 1 / 1 / 1;
+  overflow: hidden;
+  line-height: 1.5;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--vscode-input-foreground);
+  background-color: transparent;
+  display: block;
+  outline: none;
+  scrollbar-width: none;
+  box-sizing: border-box;
+  border: none;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  padding: 0px;
+  user-select: text;
+  white-space: pre-wrap;
+}
+
+.aislash-editor-input-readonly p {
+  margin: 0 !important;
+}
+
+/* Thinking indicator */
+.markdown-think {
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-left: 3px solid var(--vscode-terminal-ansiBlue, #3794ff);
+  background-color: rgba(55, 148, 255, 0.1);
+  color: var(--vscode-descriptionForeground, #a0a0a0);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.95em;
+  box-sizing: border-box;
+}
+
+.markdown-jsx.markdown-think {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-anchor: none;
+}
+
+/* Thinking indicator styles */
+.collapsible-header-text {
+  opacity: 0.6;
+  font-size: 12px;
+  color: var(--vscode-foreground);
+  transition: opacity 0.1s ease-in;
+  font-style: italic;
+}
+
+/* Code blocks */
+.composer-code-block-container {
+  margin: 16px 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--vscode-editorWidget-border, #303030);
+  background-color: var(--vscode-textCodeBlock-background, rgb(10, 10, 10));
+}
+
+.composer-code-block-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: var(--monaco-monospace-font);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgb(30, 31, 28);
+  color: var(--vscode-tab-inactiveForeground, #aaaaaa);
+}
+
+.composer-message-codeblock {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  background-color: var(--vscode-textCodeBlock-background);
+}
+
+.composer-code-block-container pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background-color: transparent !important;
+  border: none !important;
+}
+
+.composer-code-block-container pre code {
+  font-family: var(--monaco-monospace-font);
+  font-size: 0.9em;
+  color: var(--vscode-editor-foreground, #d4d4d4);
+  background-color: transparent !important;
+  padding: 0 !important;
+  white-space: pre; /* Preserve whitespace in code blocks */
+}
+
+/* Tool usage indicators */
+.composer-tool-former-message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-anchor: none;
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--vscode-terminal-ansiBlue, #3794ff);
+  background-color: rgba(55, 148, 255, 0.1);
+  color: var(--vscode-descriptionForeground, #a0a0a0);
+  border-radius: 0 4px 4px 0;
+  font-size: 0.95em;
+  box-sizing: border-box;
+}
+
+.composer-tool-former-message .collapsible-header-text {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.composer-tool-former-message .truncate {
+  font-style: normal;
+  opacity: 0.7;
+  margin-left: 8px;
+}
+
+/* Mention styles */
+.mention {
+  background-color: color-mix(in srgb, var(--vscode-charts-blue) 20%, transparent);
+  cursor: pointer;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  color: var(--vscode-textLink-activeForeground, #ffffff);
+}
+
+/* Scrollable div container */
+.scrollable-div-container {
+  height: 100%;
+}
+
+/* Lists in markdown */
+.markdown-section ul, .markdown-section ol {
+  padding-left: 2em;
+  margin: 0.5em 0;
+}
+
+.markdown-section li {
+  margin-bottom: 0.25em;
+}
+
+/* Tables in markdown */
+.markdown-section table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: 100%;
+}
+
+.markdown-section th, .markdown-section td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.5em;
+  text-align: left;
+}
+
+.markdown-section th {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Button styles */
+.anysphere-secondary-button {
+  background-color: transparent;
+  border: 1px solid var(--vscode-button-secondaryBorder, rgba(255, 255, 255, 0.2));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  cursor: pointer;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
+}
+
+.anysphere-secondary-button:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground, rgba(255, 255, 255, 0.1));
+}

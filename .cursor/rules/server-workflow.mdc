@@ -1,0 +1,28 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Server Workflow: Chat Viewing
+
+This rule describes how the Express backend server handles and displays the captured chat data.
+
+## Core File
+- Main server logic: [`src/server/index.js`](mdc:src/server/index.js)
+
+## Process
+1.  **Receive Chat Data**:
+    *   The server listens for POST requests on the `/chat-update` endpoint.
+    *   It expects a JSON payload containing `htmlContent` (the raw HTML of the chat from the extension).
+    *   The received `htmlContent` is stored in an in-memory variable `latestChatHtml`.
+2.  **Serve Chat View Page**:
+    *   A GET request to `/view-chat` serves a basic HTML page.
+    *   This page contains an iframe whose `src` is set to `/get-chat-html`.
+    *   The iframe is sandboxed (`sandbox="allow-same-origin allow-scripts"`).
+3.  **Provide Styled Chat Content**:
+    *   A GET request to `/get-chat-html` (typically from the iframe) is responsible for sending the actual chat content.
+    *   This endpoint prepends a `<style>` block containing CSS rules to the `latestChatHtml`.
+    *   The CSS rules are specifically crafted to mimic the appearance of the Cursor/VS Code chat interface, targeting known class names and HTML structures extracted from the chat.
+    *   The combined CSS and HTML string is then sent as the response.
+4.  **Static Client Files**: The server also serves static files from [`src/client/`](mdc:src/client).
+5.  **WebSocket Communication**: The server sets up Socket.IO for real-time communication, potentially with desktop and mobile clients, though this is separate from the `/view-chat` HTML rendering.

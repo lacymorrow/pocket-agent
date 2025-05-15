@@ -1,0 +1,22 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Extension Workflow: Chat Data Capture
+
+This rule describes how the "Pocket Agent" VS Code extension captures and transmits chat data.
+
+## Core File
+- Main logic: [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js)
+
+## Process
+1.  **Connect to Cursor Debug Port**: The extension uses the Chrome DevTools Protocol (CDP) to connect to Cursor. The debug port is configurable via `CURSOR_DEBUG_PORT` (default: 9223). It identifies the main workbench page's `webSocketDebuggerUrl`.
+2.  **Extract Chat HTML**:
+    *   It periodically (controlled by `POCKET_AGENT_POLL_INTERVAL`) executes JavaScript within the Cursor page via CDP.
+    *   The JavaScript targets the selector `div.pane-body div.conversations`.
+    *   It extracts the `outerHTML` of this container, capturing the complete HTML structure of the chat.
+3.  **Send to Backend Server**:
+    *   The extracted `htmlContent` is sent as a JSON payload via a POST request to the `/chat-update` endpoint on the backend server (URL configured by `POCKET_AGENT_SERVER_URL`, default: `http://localhost:3300`).
+    *   The payload includes `htmlContent`, `source: 'vscode-extension'`, and a `timestamp`.
+4.  **Logging**: The extension logs its activities to a dedicated VS Code output channel named "Pocket Agent" and to the console.

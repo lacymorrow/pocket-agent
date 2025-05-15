@@ -3,3 +3,43 @@ description:
 globs:
 alwaysApply: false
 ---
+# Communication Flow
+
+The Pocket Agent extension manages communication between multiple systems:
+
+```
++---------------------+       +-----------------+       +-------------------+
+|                     |       |                 |       |                   |
+| Cursor Editor       | <---> | Pocket Agent    | <---> | Backend Server    |
+| (CDP Debug Port)    |       | (VS Code Ext)   |       | (Socket.IO)       |
+|                     |       |                 |       |                   |
++---------------------+       +-----------------+       +-------------------+
+                                      ^
+                                      |
+                                      v
+                              +----------------+
+                              |                |
+                              | VS Code UI     |
+                              | (Output, etc)  |
+                              |                |
+                              +----------------+
+```
+
+## Data Flow Sequence
+
+1. **Cursor to Extension**:
+   - The extension connects to Cursor's Chrome DevTools Protocol
+   - It uses JavaScript evaluation in the Cursor window to extract chat content
+   - This is handled in [readChatTextLogicJs](mdc:src/cursor-plugin.js)
+
+2. **Extension to Backend Server**:
+   - The extension parses raw chat text into structured data
+   - It sends the structured data to the backend server via Socket.IO
+   - This is managed by [fetchAndSendChatUpdate](mdc:src/cursor-plugin.js)
+
+3. **Extension to VS Code UI**:
+   - The extension creates and writes to a dedicated output channel
+   - It displays status notifications using VS Code's window API
+   - This is implemented in the custom logging functions in [activate](mdc:src/cursor-plugin.js)
+
+The communication cycle repeats on a configurable interval, continuously syncing Cursor's chat with the backend server.

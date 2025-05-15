@@ -3,3 +3,53 @@ description:
 globs:
 alwaysApply: false
 ---
+# Output Channel Usage
+
+The Pocket Agent extension utilizes a dedicated VS Code output channel for logging and debugging purposes.
+
+## Output Channel Implementation
+
+The output channel is created in the [activate](mdc:src/cursor-plugin.js) function:
+
+```javascript
+pocketAgentOutputChannel = vscode.window.createOutputChannel("Pocket Agent");
+context.subscriptions.push(pocketAgentOutputChannel);
+```
+
+## Logging Functions
+
+Custom logging functions are provided that write to both the console and the output channel:
+
+1. **log function**: For general information
+```javascript
+const log = (message) => {
+    console.log(message);
+    if (pocketAgentOutputChannel) {
+        pocketAgentOutputChannel.appendLine(message);
+    }
+};
+```
+
+2. **logError function**: For error details
+```javascript
+const logError = (message, error) => {
+    console.error(message, error);
+    if (pocketAgentOutputChannel) {
+        pocketAgentOutputChannel.appendLine(`ERROR: ${message}`);
+        if (error && error.message) {
+            pocketAgentOutputChannel.appendLine(`  Details: ${error.message}`);
+        } else if (typeof error === 'string') {
+            pocketAgentOutputChannel.appendLine(`  Details: ${error}`);
+        }
+    }
+};
+```
+
+## Usage Guidelines
+
+When working with the output channel:
+
+1. Use the custom logging functions exclusively
+2. Don't call `pocketAgentOutputChannel.appendLine()` directly
+3. Ensure all console.log/console.error calls are replaced with log/logError
+4. The output channel automatically cleans up during extension deactivation
