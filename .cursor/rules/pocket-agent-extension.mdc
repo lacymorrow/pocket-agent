@@ -3,3 +3,29 @@ description:
 globs:
 alwaysApply: false
 ---
+# Pocket Agent: VS Code Extension Logic
+
+This rule describes the functionality of the Pocket Agent VS Code extension, primarily defined in [src/cursor-plugin.js](mdc:src/cursor-plugin.js).
+
+## Key Responsibilities:
+
+1.  **Activation & Deactivation**: Standard extension lifecycle managed by `activate` and `deactivate` functions.
+2.  **Cursor Debugger Interaction**: The extension connects to Cursor's remote debugging port to access information about open windows and their content. This is crucial for fetching chat data.
+    *   Key function: `getWebSocketDebuggerUrlJs` (identifies target pages and their WebSocket debugger URLs and titles).
+3.  **Chat Content Extraction (CDP)**: Uses the Chrome DevTools Protocol (CDP) over WebSocket to evaluate JavaScript within Cursor's webviews and extract the HTML content of AI chat panels.
+    *   Key functions: `fetchChatHtmlFromDebuggerUrl`, `evaluateJavascriptInPageJs`, `sendCdpCommandJs`.
+4.  **Workspace/Title Identification**: Parses the title of the Cursor window/page (obtained via CDP) to determine the workspace name, which is then used for naming tabs in the web viewer. The logic attempts to extract the name appearing after a " — " separator in the title.
+    *   Relevant logic is within `readChatTextLogicJs`.
+5.  **Data Aggregation & Formatting**: Consolidates chat HTML and associated names (workspace titles) into a structured payload.
+    *   Function: `readChatTextLogicJs` returns an array of `{html, name}` objects.
+6.  **Communication with Backend Server**: Periodically sends the collected chat data to the backend server ([src/server/index.js](mdc:src/server/index.js)) via an HTTP POST request to the `/chat-update` endpoint.
+    *   Key function: `fetchAndSendChatUpdate` handles this, sending a payload like `{ conversations: [{html, name, ...}] }`.
+7.  **Logging**: Provides diagnostic information to a dedicated "Pocket Agent" output channel in VS Code using `log` and `logError` helper functions.
+
+## Important Variables & Configuration:
+
+*   `SERVER_URL`: The URL of the backend server (default: `http://localhost:3300`). Configurable via `POCKET_AGENT_SERVER_URL` environment variable.
+*   `CURSOR_DEBUG_PORT`: The port for Cursor's remote debugging (default: `9223`). Configurable via `CURSOR_DEBUG_PORT` environment variable.
+*   `POCKET_AGENT_POLL_INTERVAL`: Interval for polling chat updates (default: 5000ms). Configurable via environment variable.
+
+Understanding these responsibilities and key functions is essential when working on the extension's features or troubleshooting its behavior.

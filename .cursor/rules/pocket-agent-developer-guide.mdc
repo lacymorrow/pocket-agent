@@ -1,0 +1,78 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Pocket Agent Developer Guide
+
+This guide provides essential information for developers working on the Pocket Agent project, focusing on code conventions, testing, and understanding interactions within the Cursor environment, especially concerning the new authentication system.
+
+## 1. Code Conventions
+
+When modifying or extending the Pocket Agent codebase ([`src/cursor-plugin.js`](mdc:src/cursor-plugin.js)), adhere to the following:
+
+### Logging
+1.  Use the global logging functions initialized in `activate()`:
+    *   `log()` for general information (replaces `console.log`).
+    *   `logError()` for error information (replaces `console.error`).
+2.  All log messages should:
+    *   Be prefixed with "Pocket Agent:" for easy identification in the "Pocket Agent" output channel.
+    *   Be descriptive and include context-specific details.
+
+### Error Handling
+1.  Use `try/catch` blocks for CDP operations, network communications (HTTP, Socket.IO), and authentication processes.
+2.  For functions in polling loops or non-critical paths, consider graceful error handling that doesn't halt the extension. Critical failures (e.g., inability to connect to debug port, initial authentication failures if blocking) should inform the user appropriately.
+3.  Clean up resources (e.g., WebSockets, event listeners) in `finally` blocks or when they are no longer needed.
+
+### Authentication (`vscode.authentication` & `context.secrets`)
+1.  **Primary Authentication File**: [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js)
+2.  **Flow**: The extension uses `vscode.authentication.getSession('github', ...)` to get a GitHub token, exchanges it with the backend (`/auth/vscode/github-exchange`) for a service API token and User ID, which are then stored in `context.secrets`.
+3.  **Credential Usage**: The service API token is sent as a Bearer token in the `Authorization` header for authenticated backend requests. The service User ID is included in request payloads where necessary.
+4.  **Secure Storage**: Always use `context.secrets` for storing sensitive tokens. Do not log full tokens.
+5.  Refer to `[pocket-agent-auth-workflow.mdc](mdc:.cursor/rules/pocket-agent-auth-workflow.mdc)` for a detailed authentication flow.
+
+### WebSocket & CDP Communication
+1.  Set appropriate timeouts for CDP commands (default: 10000ms, adjustable).
+2.  Manage CDP WebSocket connections carefully: open when needed, close when done.
+3.  Include `error`, `message`, and `close` handlers for all project WebSockets (CDP and Socket.IO client).
+
+### File Organization & Modularity
+*   Keep related functionality grouped within [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js) or consider further modularization if the file grows too large.
+*   Use descriptive names for functions and variables.
+*   Document new functions with JSDoc comments.
+
+### Environment Variables
+*   Key configurable values:
+    *   `CURSOR_DEBUG_PORT` (default: 9223): For connecting to Cursor for CDP.
+    *   `POCKET_AGENT_SERVER_URL` (default: `https://pocket-agent.vercel.app/`): Backend server URL.
+    *   `POCKET_AGENT_POLL_INTERVAL` (default: 5000ms): Interval for fetching chat updates.
+*   **Note**: User identification is now handled via the OAuth flow, not a direct environment variable for User ID.
+
+## 2. Chat Styling Strategy for Web View
+
+This functionality, related to how chat HTML is styled on the server's `/view-chat` page, is primarily managed by the backend server code (e.g., [`src/server/index.js`](mdc:src/server/index.js) if applicable) and associated CSS files like [`pocket-chat.css`](mdc:pocket-chat.css). The extension ([`src/cursor-plugin.js`](mdc:src/cursor-plugin.js)) is responsible for extracting the raw chat `outerHTML`.
+
+## 3. Testing Typing Functionality (`test-type-in-cursor.js`)
+
+A standalone test script, [`test-type-in-cursor.js`](mdc:test-type-in-cursor.js), allows for testing the message typing functionality into Cursor windows without the full extension/server stack.
+
+*   **Purpose**: Directly tests `sendMessageToCursorWindow()` logic.
+*   **Key Components**: Configurable target window ID, message, and copied CDP functions from [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js).
+*   **Usage**: Refer to the script itself for setup and execution instructions. Requires `ws` npm package.
+
+## 4. Understanding Cursor's DOM for Automation
+
+Key selectors used in [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js) for interacting with Cursor's UI via CDP:
+
+### Chat Input for `sendMessageToCursorWindow`:
+*   A prioritized list of selectors is used, including:
+    *   `'div.chat-input-widget textarea'`
+    *   `'.aiprompt-editor textarea'`
+    *   `'textarea[placeholder*="Send a message"]'`
+    *   (See `sendMessageToCursorWindow` for the full list)
+
+### Chat Conversation Area for `fetchChatHtmlFromDebuggerUrl`:
+*   **Selector (evaluated in page context):** `div.pane-body div.conversations`
+*   **JS Snippet:** `(() => { const el = document.querySelector('div.pane-body div.conversations'); return el ? el.outerHTML : null; })()`
+
+Understanding these is crucial for debugging UI interaction issues.

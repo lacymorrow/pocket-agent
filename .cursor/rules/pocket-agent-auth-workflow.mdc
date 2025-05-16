@@ -1,0 +1,58 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Pocket Agent Authentication Workflow
+
+This document outlines the GitHub OAuth-based authentication flow implemented in the Pocket Agent VS Code extension. This flow replaces the previous manual User ID configuration.
+
+## Core File
+- Main authentication logic: [`src/cursor-plugin.js`](mdc:pocket-agent/src/cursor-plugin.js)
+
+## Authentication Process
+
+1.  **Initiation**:
+    *   Authentication can be initiated by the user explicitly triggering the `pocketAgent.signIn` command.
+    *   It can also be prompted if the extension attempts to send data (e.g., via `fetchAndSendChatUpdate`) and finds no valid credentials stored.
+
+2.  **GitHub Token Retrieval**:
+    *   The extension calls `vscode.authentication.getSession('github', ['read:user'], { createIfNone: true })`.
+    *   This prompts the user to authenticate with GitHub via VS Code's built-in mechanism if no active session exists for the "Pocket Agent" extension with the specified scopes.
+    *   If successful, VS Code returns a GitHub OAuth access token.
+
+3.  **Token Exchange with Backend Server**:
+    *   The extension sends the obtained GitHub access token to a dedicated backend endpoint: `POST /auth/vscode/github-exchange`.
+    *   The GitHub token is sent in the `Authorization: Bearer <github_token>` header.
+    *   **Backend Responsibility**: The backend server must:
+        *   Validate the received GitHub token (e.g., by querying the GitHub API).
+        *   Identify or create a user in its own database based on the validated GitHub user.
+        *   Generate a service-specific API token and a service-specific User ID for this user.
+        *   Return these credentials in a JSON response, e.g., `{ "apiToken": "YOUR_SERVICE_API_TOKEN", "userId": "YOUR_SERVICE_USER_ID" }`.
+
+4.  **Secure Credential Storage**:
+    *   Upon receiving a successful response from the backend, the extension securely stores:
+        *   The service-specific API token using `context.secrets.store('pocketAgentServiceApiToken', serviceAuthData.apiToken)`.
+        *   The service-specific User ID using `context.secrets.store('pocketAgentServiceUserId', serviceAuthData.userId)`.
+    *   These credentials persist across VS Code sessions.
+
+5.  **Authenticated Requests**:
+    *   When sending data to the backend (e.g., to `/chat-update` via `fetchAndSendChatUpdate` in [`src/cursor-plugin.js`](mdc:pocket-agent/src/cursor-plugin.js)):
+        *   The stored service API token is retrieved from `context.secrets`.
+        *   The token is included in the `Authorization: Bearer <service_api_token>` header.
+        *   The stored service User ID is included in the JSON payload of the request.
+    *   If the backend returns a 401 or 403 status, it's assumed the token is invalid/expired, and the extension will attempt to sign the user out and prompt for a new sign-in.
+
+## Sign Out Process
+
+*   The user can trigger the `pocketAgent.signOut` command.
+*   This command deletes the stored `pocketAgentServiceApiToken` and `pocketAgentServiceUserId` from `context.secrets`.
+*   In-memory variables holding these credentials are also cleared.
+
+## Key Functions in [`src/cursor-plugin.js`](mdc:pocket-agent/src/cursor-plugin.js)
+*   `signIn(context)`: Manages the sign-in flow.
+*   `signOut(context)`: Manages the sign-out flow.
+*   `fetchAndSendChatUpdate()`: Demonstrates how stored credentials are used for authenticated requests.
+*   `activate(context)`: Loads stored credentials on extension startup.
+
+This authentication flow provides a more secure and user-friendly way to connect the VS Code extension to your backend service.

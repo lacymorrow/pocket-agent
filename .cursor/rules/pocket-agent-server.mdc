@@ -3,3 +3,39 @@ description:
 globs:
 alwaysApply: false
 ---
+# Pocket Agent: Backend Server Logic
+
+This rule describes the backend server for Pocket Agent, implemented in [src/server/index.js](mdc:src/server/index.js) using Express.js and Socket.IO.
+
+## Key Responsibilities & Endpoints:
+
+1.  **Receiving Chat Data (`/chat-update`)**: This POST endpoint is the primary interface for the VS Code extension ([src/cursor-plugin.js](mdc:src/cursor-plugin.js)) to send chat data.
+    *   Expects a JSON payload, ideally: `{ conversations: [{ html: String, name: String }], source: String, timestamp: String }`.
+    *   It also supports older payload formats (`htmlContents` array, `htmlContent` string) for backward compatibility.
+    *   Updates the `activeConversationsStore` with the received data.
+    *   Emits a `conversationsUpdated` event via Socket.IO to notify connected web clients (the chat viewer) that new data is available. This allows the viewer to dynamically refresh its tab list.
+
+2.  **Serving the Chat Viewer Page (`/view-chat`)**: This GET endpoint serves the main HTML page that users access to view the collected chats.
+    *   The HTML includes client-side JavaScript to render a tabbed interface.
+    *   Each tab corresponds to a conversation stored in `activeConversationsStore`.
+    *   The tab names are derived from the `name` field of the conversation objects (e.g., workspace name).
+    *   Each active tab displays an `<iframe>` whose content is loaded from `/get-chat-html`.
+
+3.  **Serving Individual Chat HTML (`/get-chat-html`)**: This GET endpoint serves the raw HTML for a specific conversation, identified by a query parameter (e.g., `/get-chat-html?id=conv-0`).
+    *   This content is displayed within an `<iframe>` on the `/view-chat` page.
+    *   It links to [pocket-chat.css](mdc:pocket-chat.css) for styling and includes inline styles to enable vertical scrolling within the iframe if content overflows.
+
+## Core Data Structure:
+
+*   `activeConversationsStore`: An in-memory array that holds the state of all currently tracked conversations. Each element is an object, typically structured as: `{ id: String, name: String, html: String, source: String, timestamp: String }`.
+    *   `id`: A server-generated unique ID for the conversation (e.g., `conv-0`).
+    *   `name`: The name for the tab, usually the workspace name extracted by the extension.
+    *   `html`: The raw HTML content of the chat.
+
+## Real-time Updates:
+
+*   The server uses Socket.IO (`io`) for real-time communication.
+*   When `/chat-update` receives new data, it emits a `conversationsUpdated` event with the list of current conversation IDs and names (`[{id, name}]`).
+*   The client-side JavaScript on the `/view-chat` page listens for this event to update the tab bar dynamically, ensuring the viewer reflects the latest set of conversations without requiring a full page reload.
+
+Other functionalities include serving static files (like `pocket-chat.css` and client-side `socket.io.js`) and handling basic Socket.IO connection events.

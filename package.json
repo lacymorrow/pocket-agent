@@ -28,37 +28,31 @@
         "category": "Pocket Agent"
       },
       {
-        "command": "pocketAgent.setUserId",
-        "title": "Pocket Agent: Set User ID",
+        "command": "pocketAgent.signIn",
+        "title": "Pocket Agent: Sign In",
+        "category": "Pocket Agent"
+      },
+      {
+        "command": "pocketAgent.signOut",
+        "title": "Pocket Agent: Sign Out",
         "category": "Pocket Agent"
       }
     ],
     "configuration": {
       "title": "Pocket Agent",
-      "properties": {
-        "pocketAgent.userId": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null,
-          "description": "Your Pocket Agent User ID. This is used to associate your IDE with your Pocket Agent account.",
-          "scope": "machine-overridable"
-        }
-      }
+      "properties": {}
     }
   },
   "scripts": {
-    "start": "node src/server/index.js",
-    "dev": "nodemon src/server/index.js",
     "package": "vsce package",
-    "install-extension": "vsce package -o ./cursor-pocket-agent.vsix && cursor --install-extension ./cursor-pocket-agent.vsix --force && rm ./cursor-pocket-agent.vsix",
-    "vercel-build": "echo 'No build steps needed'"
+    "install-extension": "vsce package -o ./cursor-pocket-agent.vsix && cursor --install-extension ./cursor-pocket-agent.vsix --force && rm ./cursor-pocket-agent.vsix"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
+    "ioredis": "^5.6.1",
+    "isomorphic-dompurify": "^2.24.0",
     "node-fetch": "^3.3.2",
     "socket.io": "^4.7.2",
     "socket.io-client": "^4.7.2",

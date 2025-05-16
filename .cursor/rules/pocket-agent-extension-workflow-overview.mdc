@@ -1,0 +1,94 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Pocket Agent Extension Workflow Overview
+
+This document outlines the architecture, core workflow, and communication flow of the Pocket Agent VS Code extension, primarily managed by [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js). It incorporates the new GitHub OAuth-based authentication mechanism.
+
+## 1. Overview & Architecture
+
+The extension interfaces with Cursor IDE windows via the Chrome DevTools Protocol (CDP) and communicates with a backend server (e.g., running from [`src/server/index.js`](mdc:src/server/index.js) or a deployed instance) using HTTP and Socket.IO. User authentication is handled via GitHub OAuth, with service-specific tokens managed by the extension.
+
+### Key Architectural Components:
+*   **Authentication**: Utilizes `vscode.authentication.getSession('github', ...)` for GitHub OAuth. Exchanges GitHub token with the backend for a service API token and service User ID. Credentials stored in `context.secrets`.
+*   **CDP Interaction**: For reading data (chat content) from and sending commands (like typing) to Cursor windows.
+*   **HTTP/Socket.IO Client**: For sending captured chat data to the backend and receiving commands from it.
+*   **Polling Mechanism**: To periodically fetch chat updates.
+*   **Logging**: To provide operational insights and debug information via a dedicated "Pocket Agent" output channel.
+*   **VS Code API Integration**: For user notifications, commands, and secure credential storage.
+
+## 2. Core Functionalities & Workflow Steps
+
+### 2.1. Activation & Authentication
+*   **On Activation (`activate()` in [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js))**:
+    *   The extension attempts to load the service API token and service User ID from `context.secrets`.
+    *   If credentials are not found, the user will be prompted to sign in when data transmission is attempted.
+*   **Sign-In (`pocketAgent.signIn` command)**:
+    *   Initiates GitHub OAuth flow via `vscode.authentication.getSession()`.
+    *   Sends the obtained GitHub token to the backend (`/auth/vscode/github-exchange`) to get a service API token and service User ID.
+    *   Stores these securely in `context.secrets`.
+    *   Refer to the `[pocket-agent-auth-workflow.mdc](mdc:.cursor/rules/pocket-agent-auth-workflow.mdc)` rule for full details.
+*   **Sign-Out (`pocketAgent.signOut` command)**:
+    *   Clears the service API token and service User ID from `context.secrets`.
+
+### 2.2. Connection to Cursor Debug Port
+*   The extension finds active Cursor windows by querying `http://localhost:CURSOR_DEBUG_PORT/json/list` (default port `9223`, configurable via `CURSOR_DEBUG_PORT` environment variable).
+*   It filters for `page` type targets, prioritizing `workbench.html` pages, to get their `webSocketDebuggerUrl`. This URL serves as the unique `id` for each chat window.
+*   Relevant function: `getWebSocketDebuggerUrlJs()` in [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js).
+
+### 2.3. Chat Content Extraction (Polling)
+*   At a configurable interval (`POCKET_AGENT_POLL_INTERVAL`, default `5000ms`), the extension fetches chat content from all identified Cursor windows.
+*   For each window, it connects via its `webSocketDebuggerUrl` using CDP.
+*   It evaluates JavaScript (`evaluateJavascriptInPageJs()`) in the target page to extract the `outerHTML` of the chat container (typically `div.pane-body div.conversations`).
+*   Relevant functions: `readChatTextLogicJs()`, `fetchChatHtmlFromDebuggerUrl()` in [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js).
+
+### 2.4. Data Transmission to Server (`fetchAndSendChatUpdate()`)
+*   Requires valid authentication (service API token and User ID from `context.secrets`). If not available, prompts user to sign in.
+*   Extracted chat data (HTML, window name, and window `id`) from all windows is compiled into a JSON payload: `{ conversations: [{html, name, id}], source, timestamp, userId }` (where `userId` is the service-specific User ID).
+*   This payload is sent via an HTTP POST request to the `/chat-update` endpoint of the backend server (URL configurable via `POCKET_AGENT_SERVER_URL`).
+*   The service API token is included in the `Authorization: Bearer <service_api_token>` header.
+
+### 2.5. Receiving Messages from Server to Type into Cursor
+*   The extension maintains a persistent Socket.IO connection to the backend server.
+*   It listens for a `sendMessageToWindow` event from the server. This event carries a `windowId` (the `webSocketDebuggerUrl` of the target Cursor window) and `messageText`.
+*   Upon receiving this event, the `sendMessageToCursorWindow()` function in [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js) is invoked.
+
+### 2.6. Typing Messages into Cursor via CDP
+*   The `sendMessageToCursorWindow()` function connects to the target Cursor window, finds the chat input element, focuses it, inserts text, and simulates an "Enter" key press.
+*   Refer to `developer-guide.mdc` (if available/created) or directly to the `sendMessageToCursorWindow` function in [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js) for details on selectors and CDP commands used.
+
+## 3. Communication Flow Diagram (Simplified)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant VSCodeUI as VS Code UI / Auth
+    participant PocketAgentExt as Pocket Agent Ext.
+    participant GitHub
+    participant BackendServer as Backend Server
+    participant CursorEditor as Cursor Editor (CDP)
+
+    User->>+VSCodeUI: Trigger pocketAgent.signIn
+    VSCodeUI->>+PocketAgentExt: Execute signIn command
+    PocketAgentExt->>+GitHub: Request OAuth Token (via VSCode API)
+    GitHub-->>-PocketAgentExt: Provide GitHub Token
+    PocketAgentExt->>+BackendServer: POST /auth/vscode/github-exchange (with GitHub Token)
+    BackendServer-->>-PocketAgentExt: Return Service API Token & UserID
+    Note over PocketAgentExt: Stores credentials securely
+
+    loop Chat Polling
+        PocketAgentExt->>+CursorEditor: Connect via CDP, Get Chat HTML
+        CursorEditor-->>-PocketAgentExt: Return Chat HTML
+        PocketAgentExt->>+BackendServer: POST /chat-update (Chat HTML, Service UserID, Auth Header with Service Token)
+        BackendServer-->>-PocketAgentExt: Acknowledge
+    end
+
+    %% Example: Server sends message to type
+    BackendServer-->>PocketAgentExt: socket.emit('sendMessageToWindow', {windowId, messageText})
+    PocketAgentExt->>+CursorEditor: Connect via CDP, Type Message
+    CursorEditor-->>-PocketAgentExt: Acknowledge (implicitly)
+```
+
+This overview should help in understanding the extension's operational flow with the new authentication system.

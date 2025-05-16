@@ -13,7 +13,7 @@ When modifying or extending the Pocket Agent codebase, follow these conventions:
 
 ### Logging
 
-1.  Use the custom logging functions for all messages, available after `activate()` has initialized `pocketAgentOutputChannel` and global loggers in [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js):
+1.  Use the custom logging functions for all messages, available after `activate()` has initialized `pocketAgentOutputChannel` and global loggers in [`src/cursor-plugin.js`](mdc:pocket-agent/pocket-agent/src/cursor-plugin.js):
     *   `log()` for general information (replaces `console.log`)
     *   `logError()` for error information (replaces `console.error`)
 
@@ -25,7 +25,7 @@ When modifying or extending the Pocket Agent codebase, follow these conventions:
 ### Error Handling
 
 1.  Use try/catch blocks around all CDP operations and network communications.
-2.  For functions within the extension ([`src/cursor-plugin.js`](mdc:src/cursor-plugin.js)) that are part of a polling loop or non-critical path, consider returning `null` or a default value instead of throwing errors that might halt the extension. Critical failures (e.g., inability to connect to debug port initially) should still inform the user.
+2.  For functions within the extension ([`src/cursor-plugin.js`](mdc:pocket-agent/pocket-agent/src/cursor-plugin.js)) that are part of a polling loop or non-critical path, consider returning `null` or a default value instead of throwing errors that might halt the extension. Critical failures (e.g., inability to connect to debug port initially) should still inform the user.
 3.  Always clean up resources in `finally` blocks (e.g., closing WebSockets).
 
 ### WebSocket & CDP Communication
@@ -36,7 +36,7 @@ When modifying or extending the Pocket Agent codebase, follow these conventions:
 
 ### File Organization
 
-As the project ([`src/cursor-plugin.js`](mdc:src/cursor-plugin.js), [`src/server/index.js`](mdc:src/server/index.js)) grows:
+As the project ([`src/cursor-plugin.js`](mdc:pocket-agent/pocket-agent/src/cursor-plugin.js), [`src/server/index.js`](mdc:pocket-agent/pocket-agent/src/server/index.js)) grows:
 
 1.  Keep related functionality grouped logically.
 2.  Use descriptive function and variable names.
@@ -45,45 +45,45 @@ As the project ([`src/cursor-plugin.js`](mdc:src/cursor-plugin.js), [`src/server
 
 ### Environment Variables
 
-1.  All configurable values for the extension (see [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js)) should use environment variables with sensible defaults (e.g., `CURSOR_DEBUG_PORT`, `POCKET_AGENT_SERVER_URL`, `POCKET_AGENT_POLL_INTERVAL`).
-2.  Document any new environment variables in the [Project Overview](mdc:.cursor/rules/project-overview.mdc).
+1.  All configurable values for the extension (see [`src/cursor-plugin.js`](mdc:pocket-agent/pocket-agent/src/cursor-plugin.js)) should use environment variables with sensible defaults (e.g., `CURSOR_DEBUG_PORT`, `POCKET_AGENT_SERVER_URL`, `POCKET_AGENT_POLL_INTERVAL`).
+2.  Document any new environment variables in the [Project Overview](mdc:pocket-agent/pocket-agent/.cursor/rules/project-overview.mdc).
 
 ## 2. Chat Styling Strategy for Web View
 
-This section outlines the approach for styling the chat content on the `/view-chat` page served by [`src/server/index.js`](mdc:src/server/index.js).
+This section outlines the approach for styling the chat content on the `/view-chat` page served by [`src/server/index.js`](mdc:pocket-agent/pocket-agent/src/server/index.js).
 
-*   **Context**: The VS Code extension ([`src/cursor-plugin.js`](mdc:src/cursor-plugin.js)) extracts `outerHTML` of chat containers. VS Code/Cursor use extensive stylesheets.
+*   **Context**: The VS Code extension ([`src/cursor-plugin.js`](mdc:pocket-agent/pocket-agent/src/cursor-plugin.js)) extracts `outerHTML` of chat containers. VS Code/Cursor use extensive stylesheets.
 *   **Strategy**:
-    1.  **Server-Side CSS Injection**: Curated CSS rules are injected by `/get-chat-html` in [`src/server/index.js`](mdc:src/server/index.js).
+    1.  **Server-Side CSS Injection**: Curated CSS rules are injected by `/get-chat-html` in [`src/server/index.js`](mdc:pocket-agent/pocket-agent/src/server/index.js).
     2.  **Targeted Selectors**: CSS uses selectors based on observed chat HTML structure (e.g., `.conversations`, `.composer-human-message`). A reference for this structure can be found in the `html` directory.
     3.  **CSS Variables**: Leverages VS Code CSS variables (e.g., `--vscode-editor-background`) with fallbacks.
-    4.  **Main Stylesheet**: A primary stylesheet, [`pocket-chat.css`](mdc:pocket-chat.css), is linked in the HTML served by `/get-chat-html`.
+    4.  **Main Stylesheet**: A primary stylesheet, [`pocket-chat.css`](mdc:pocket-agent/pocket-agent/pocket-chat.css), is linked in the HTML served by `/get-chat-html`.
     5.  **Iterative Refinement**: CSS is developed iteratively based on visual feedback.
 *   **Rationale**: Better maintainability, performance, and style isolation compared to linking original large editor stylesheets.
 
 ## 3. Testing Typing Functionality (`test-type-in-cursor.js`)
 
-A standalone test script, [`test-type-in-cursor.js`](mdc:test-type-in-cursor.js), allows for testing the message typing functionality into Cursor windows without the full extension/server stack.
+A standalone test script, [`test-type-in-cursor.js`](mdc:pocket-agent/pocket-agent/test-type-in-cursor.js), allows for testing the message typing functionality into Cursor windows without the full extension/server stack.
 
 *   **Purpose**: Directly tests `sendMessageToCursorWindow()` logic for CDP interaction, element location, click simulation (for `.aislash-editor-input`), focus, typing, and Enter key press.
 *   **Key Components**:
     *   Configurable `TARGET_WINDOW_ID` (must be set by user) and `MESSAGE_TO_SEND`.
-    *   Copied `sendCdpCommandJs()` and `sendMessageToCursorWindow()` functions from [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js).
+    *   Copied `sendCdpCommandJs()` and `sendMessageToCursorWindow()` functions from [`src/cursor-plugin.js`](mdc:pocket-agent/pocket-agent/src/cursor-plugin.js).
     *   Simplified console logging.
 *   **How to Use**:
     1.  Ensure Cursor runs with `--remote-debugging-port` (e.g., 9223).
     2.  Get the `webSocketDebuggerUrl` from `http://localhost:9223/json/list`.
-    3.  Update `TARGET_WINDOW_ID` in [`test-type-in-cursor.js`](mdc:test-type-in-cursor.js).
+    3.  Update `TARGET_WINDOW_ID` in [`test-type-in-cursor.js`](mdc:pocket-agent/pocket-agent/test-type-in-cursor.js).
     4.  Run `node test-type-in-cursor.js` from the project root.
     5.  Observe the target Cursor window and script's console output.
 *   **Dependencies**: Requires `ws` npm package.
 
 ## 4. Understanding Cursor's DOM for Automation (Advanced)
 
-This section provides insights into specific DOM elements within Cursor, which is particularly relevant for the CDP interactions in [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js) and the test script. While direct use of `cursor_debug.py` is not part of this project's runtime, understanding its selector logic can be informative.
+This section provides insights into specific DOM elements within Cursor, which is particularly relevant for the CDP interactions in [`src/cursor-plugin.js`](mdc:pocket-agent/pocket-agent/src/cursor-plugin.js) and the test script. While direct use of `cursor_debug.py` is not part of this project's runtime, understanding its selector logic can be informative.
 
 ### Target Window Selection (Conceptual - how the extension approximates this)
-The `getWebSocketDebuggerUrlJs()` in [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js) mirrors the logic for finding appropriate Cursor windows:
+The `getWebSocketDebuggerUrlJs()` in [`src/cursor-plugin.js`](mdc:pocket-agent/pocket-agent/src/cursor-plugin.js) mirrors the logic for finding appropriate Cursor windows:
 1.  Fetches "page" type targets from `http://localhost:DEBUG_PORT/json/list`.
 2.  Prioritizes `workbench.html` URLs.
 3.  Implements fallback logic if `workbench.html` is not found.
@@ -100,7 +100,7 @@ The following selectors are attempted in order to find the chat input element:
 
 ### Chat Conversation Area for Extraction (as used in `fetchChatHtmlFromDebuggerUrl`)
 *   **Selector (used within `Runtime.evaluate`):** `div.pane-body div.conversations`
-*   **JavaScript Snippet in `fetchChatHtmlFromDebuggerUrl` in [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js):**
+*   **JavaScript Snippet in `fetchChatHtmlFromDebuggerUrl` in [`src/cursor-plugin.js`](mdc:pocket-agent/pocket-agent/src/cursor-plugin.js):**
     ```javascript
     (() => { const el = document.querySelector('div.pane-body div.conversations'); return el ? el.outerHTML : null; })()
     ```

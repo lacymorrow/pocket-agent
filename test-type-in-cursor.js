@@ -11,13 +11,13 @@ let cdpMessageId = 1;
 
 // Simplified logging functions for the test script
 function log(message, ...optionalParams) {
-    const fullMessage = optionalParams.length > 0 ? message + ' ' + optionalParams.join(' ') : message;
+    const fullMessage = optionalParams.length > 0 ? `${message} ${optionalParams.join(' ')}` : message;
     console.log(`[TestScript] ${fullMessage}`);
 }
 
 function logError(message, error) {
     console.error(`[TestScript] ERROR: ${message}`);
-    if (error && error.message) {
+    if (error?.message) {
         console.error(`  Details: ${error.message}`);
     } else if (typeof error === 'string') {
         console.error(`  Details: ${error}`);
@@ -35,7 +35,14 @@ function sendCdpCommandJs(ws, method, params = {}, timeoutMs = 10000) {
     return new Promise((resolve, reject) => {
         const id = cdpMessageId++;
         const payload = JSON.stringify({ id, method, params });
-        let timeoutHandle;
+        const timeoutHandle = setTimeout(() => {
+            ws.removeListener('message', messageListener);
+            ws.removeListener('error', errorListener);
+            ws.removeListener('close', closeListener);
+            logError(`Timeout waiting for CDP response for method ${method} (ID: ${id})`);
+            reject(new Error(`Timeout waiting for CDP response for ${method}`));
+        }, timeoutMs);
+
         const messageListener = (message) => {
             try {
                 const parsedMessage = JSON.parse(message.toString());
@@ -76,13 +83,6 @@ function sendCdpCommandJs(ws, method, params = {}, timeoutMs = 10000) {
         ws.on('close', closeListener);
         log(`[CDP SEND ID ${id}] Method: ${method}, Params: ${JSON.stringify(params)}`);
         ws.send(payload);
-        timeoutHandle = setTimeout(() => {
-            ws.removeListener('message', messageListener);
-            ws.removeListener('error', errorListener);
-            ws.removeListener('close', closeListener);
-            logError(`Timeout waiting for CDP response for method ${method} (ID: ${id})`);
-            reject(new Error(`Timeout waiting for CDP response for ${method}`));
-        }, timeoutMs);
     });
 }
 
@@ -139,7 +139,7 @@ async function sendMessageToCursorWindow(windowId, messageText) {
         let inputNodeId = null;
         let foundSelector = null;
         const { root: documentNode } = await sendCdpCommandJs(cdpWs, 'DOM.getDocument', { depth: -1 });
-        if (!documentNode || !documentNode.nodeId) {
+        if (!documentNode?.nodeId) {
             throw new Error('Could not get document node from target page.');
         }
 
@@ -150,9 +150,9 @@ async function sendMessageToCursorWindow(windowId, messageText) {
                     nodeId: documentNode.nodeId,
                     selector: selector
                 });
-                if (queryResult && queryResult.nodeId !== 0) {
+                if (queryResult?.nodeId !== 0) {
                     const boxModel = await sendCdpCommandJs(cdpWs, 'DOM.getBoxModel', { nodeId: queryResult.nodeId });
-                    if (boxModel && boxModel.model && boxModel.model.width > 0 && boxModel.model.height > 0) {
+                    if (boxModel?.model?.width > 0 && boxModel?.model?.height > 0) {
                         inputNodeId = queryResult.nodeId;
                         foundSelector = selector;
                         log(`Found visible chat input with selector "${selector}", nodeId: ${inputNodeId} in ${windowId}`);
@@ -173,7 +173,7 @@ async function sendMessageToCursorWindow(windowId, messageText) {
         if (foundSelector === '.aislash-editor-input') {
             log(`Found selector is '${foundSelector}'. Attempting to click it first.`);
             const boxModelResult = await sendCdpCommandJs(cdpWs, 'DOM.getBoxModel', { nodeId: inputNodeId });
-            if (boxModelResult && boxModelResult.model && boxModelResult.model.content && boxModelResult.model.content.length >= 6) {
+            if (boxModelResult?.model?.content?.length >= 6) {
                 const contentQuad = boxModelResult.model.content;
                 const centerX = Math.round((contentQuad[0] + contentQuad[2]) / 2);
                 const centerY = Math.round((contentQuad[1] + contentQuad[5]) / 2); // Correct index for Y calculation in a quad

@@ -3,3 +3,18 @@ description:
 globs:
 alwaysApply: false
 ---
+# Pocket Agent: Project Overview
+
+This project, Pocket Agent, is a VS Code extension designed to capture AI chat conversations from the Cursor editor and display them in a dedicated web interface. This allows for easier review and access to chat history across multiple workspaces.
+
+## Core Components
+
+The system is composed of two main parts:
+
+1.  **VS Code Extension**: This component runs within VS Code. Its primary responsibilities include detecting active Cursor chat windows, extracting the HTML content of these chats, and identifying the workspace associated with each chat.
+    *   Main logic file: [src/cursor-plugin.js](mdc:src/cursor-plugin.js)
+
+2.  **Backend Server**: An Express.js application that receives chat data from the VS Code extension. It stores this data and serves a web page where users can view the collected chats in a tabbed interface, with each tab representing a different chat session/workspace.
+    *   Main logic file: [src/server/index.js](mdc:src/server/index.js)
+
+The interaction between these components enables the capturing and viewing of chat logs. The extension periodically sends updates to the server, which then makes them available through its web interface.
