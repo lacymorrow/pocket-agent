@@ -7,6 +7,12 @@ const WebSocket = require('ws'); // Added for WebSocket communication
 const SERVER_URL = process.env.POCKET_AGENT_SERVER_URL || 'http://localhost:3300';
 const CURSOR_DEBUG_PORT = process.env.CURSOR_DEBUG_PORT || 9223; // Make debug port configurable
 
+// After CURSOR_DEBUG_PORT declaration, add constant for UI selectors
+const UI_SELECTORS = (process.env.POCKET_AGENT_UI_SELECTORS || 'div.pane-body div.conversations')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
 let socket; // For connection to backend server
 let chatPollInterval;
 let cdpMessageId = 1; // Counter for CDP message IDs
@@ -472,13 +478,21 @@ function activate(context) {
                 // pollIntervalMs = 5000; // Already handled by || 5000 but good to be explicit if logic changes
             }
 
-            log('Pocket Agent: Setting up setInterval for fetchAndSendChatUpdate.');
-            chatPollInterval = setInterval(fetchAndSendChatUpdate, pollIntervalMs);
-            log('Pocket Agent: setInterval for fetchAndSendChatUpdate has been set.');
+            log('Pocket Agent: Setting up setInterval for fetchAndSendSectionUpdate.');
+            chatPollInterval = setInterval(fetchAndSendSectionUpdate, pollIntervalMs);
+            log('Pocket Agent: setInterval for fetchAndSendSectionUpdate has been set.');
 
-            log('Pocket Agent: Attempting initial direct call to fetchAndSendChatUpdate...');
-            fetchAndSendChatUpdate();
-            log('Pocket Agent: Initial direct call to fetchAndSendChatUpdate has completed or is in progress (async).');
+            log('Pocket Agent: Attempting initial direct call to fetchAndSendSectionUpdate...');
+            fetchAndSendSectionUpdate();
+            log('Pocket Agent: Initial direct call to fetchAndSendSectionUpdate has completed or is in progress (async).');
+
+            // Register this extension as the desktop client for the server bridge
+            try {
+                socket.emit('register', 'desktop');
+                log('Pocket Agent: Sent register event as desktop to backend server.');
+            } catch (regErr) {
+                logError('Pocket Agent: Failed to send register event:', regErr);
+            }
 
         } catch (e) {
             logError('Pocket Agent: Error within socket.on("connect") handler:', e);
@@ -501,6 +515,9 @@ function activate(context) {
         // vscode.window.showErrorMessage(`Pocket Agent failed to connect to backend: ${error.message}`);
     });
 
+    // Listen for UI interaction events from remote client
+    socket.on('ui_event', handleUiEvent);
+
     // Original command for Cursor's internal use (if any)
     let toolCallDisposable = vscode.commands.registerCommand('_extensionClient.toolCall', function (...args) {
         log('Pocket Agent: _extensionClient.toolCall invoked with args:', args);
@@ -510,8 +527,8 @@ function activate(context) {
     context.subscriptions.push(toolCallDisposable);
 
     // Command to manually trigger chat fetch (for debugging)
-    let manualFetchDisposable = vscode.commands.registerCommand('pocketAgent.manualChatFetch', fetchAndSendChatUpdate);
-    context.subscriptions.push(manualFetchDisposable);
+    let manualSectionFetchDisposable = vscode.commands.registerCommand('pocketAgent.manualSectionFetch', fetchAndSendSectionUpdate);
+    context.subscriptions.push(manualSectionFetchDisposable);
 
     log("Pocket Agent: Before pushing main disposable...");
 
@@ -543,4 +560,147 @@ module.exports = {
     activate,
     deactivate
 };
+
+// After fetchChatHtmlFromDebuggerUrl definition, add generic section fetcher
+async function fetchSectionHtmlFromDebuggerUrl(debuggerUrl, selector) {
+    if (!debuggerUrl) {
+        logError('Pocket Agent: fetchSectionHtmlFromDebuggerUrl called with no debuggerUrl.');
+        return null;
+    }
+    log(`Pocket Agent: Attempting to fetch UI section (${selector}) from: ${debuggerUrl}`);
+    let cdpWs;
+    try {
+        cdpWs = new WebSocket(debuggerUrl);
+        await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('CDP connection timeout')), 5000);
+            cdpWs.on('open', () => { clearTimeout(timeout); resolve(); });
+            cdpWs.on('error', (err) => { clearTimeout(timeout); reject(err); });
+        });
+
+        // JS snippet to annotate each element with a stable path so that clicks can be mapped back.
+        // The root element receives path "0", each child path is parentPath + '.' + index
+        const escapedSelector = JSON.stringify(selector);
+        const expression = `(() => {
+            const root = document.querySelector(${escapedSelector});
+            if (!root) return null;
+            const annotate = (node, path) => {
+                node.setAttribute('data-pocket-path', path);
+                Array.from(node.children).forEach((child, idx) => annotate(child, path + '.' + idx));
+            };
+            annotate(root, '0');
+            return root.outerHTML;
+        })()`;
+
+        const html = await evaluateJavascriptInPageJs(cdpWs, expression);
+        if (html && typeof html === 'string') {
+            log(`Pocket Agent: Successfully captured UI section (${selector}). Length: ${html.length}`);
+        } else {
+            log(`Pocket Agent: UI section (${selector}) not found or returned non-string.`);
+        }
+        return html;
+    } catch (err) {
+        logError(`Pocket Agent: Error capturing UI section (${selector}) from ${debuggerUrl}:`, err);
+        return null;
+    } finally {
+        if (cdpWs && cdpWs.readyState === WebSocket.OPEN) {
+            cdpWs.close();
+        }
+    }
+}
+
+// Utility to read first matching UI section across all debugger URLs
+async function readFirstUISectionHtml() {
+    const debuggerUrls = await getWebSocketDebuggerUrlJs();
+    if (!debuggerUrls || debuggerUrls.length === 0) {
+        return null;
+    }
+    // iterate selectors then urls so earlier selector has priority
+    for (const selector of UI_SELECTORS) {
+        for (const dbgUrl of debuggerUrls) {
+            const html = await fetchSectionHtmlFromDebuggerUrl(dbgUrl, selector);
+            if (html) {
+                return { selector, html };
+            }
+        }
+    }
+    return null;
+}
+
+// Function to send section update to server via socket
+async function fetchAndSendSectionUpdate() {
+    try {
+        const section = await readFirstUISectionHtml();
+        if (!section) {
+            log('Pocket Agent: No UI section HTML captured to send.');
+            return;
+        }
+        if (socket && socket.connected) {
+            socket.emit('section_update', {
+                selector: section.selector,
+                html: section.html,
+                timestamp: Date.now()
+            });
+            log(`Pocket Agent: Sent section_update for selector "${section.selector}" to server.`);
+        } else {
+            log('Pocket Agent: Socket not connected, skipping section_update emit.');
+        }
+    } catch (e) {
+        logError('Pocket Agent: Error in fetchAndSendSectionUpdate:', e);
+    }
+}
+
+// Handle UI events coming back from remote client
+async function handleUiEvent(data) {
+    try {
+        const { selector, path, eventType = 'click' } = data || {};
+        if (!selector || !path) {
+            logError('Pocket Agent: handleUiEvent received invalid data:', JSON.stringify(data));
+            return;
+        }
+        const debuggerUrls = await getWebSocketDebuggerUrlJs();
+        if (!debuggerUrls || debuggerUrls.length === 0) {
+            log('Pocket Agent: No debugger URLs available when processing ui_event.');
+            return;
+        }
+        // We just try on the first page that succeeds
+        for (const dbgUrl of debuggerUrls) {
+            let cdpWs;
+            try {
+                cdpWs = new WebSocket(dbgUrl);
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('CDP connection timeout')), 5000);
+                    cdpWs.on('open', () => { clearTimeout(timeout); resolve(); });
+                    cdpWs.on('error', (err) => { clearTimeout(timeout); reject(err); });
+                });
+
+                const js = `(() => {
+                    const root = document.querySelector(${JSON.stringify(selector)});
+                    if (!root) return false;
+                    const parts = ${JSON.stringify(path)}.split('.').slice(1);
+                    let node = root;
+                    for (const p of parts) {
+                        const idx = parseInt(p, 10);
+                        if (!node.children || idx >= node.children.length) return false;
+                        node = node.children[idx];
+                    }
+                    const ev = new MouseEvent(${JSON.stringify(eventType)}, { bubbles: true, cancelable: true });
+                    node.dispatchEvent(ev);
+                    return true;
+                })()`;
+
+                const result = await evaluateJavascriptInPageJs(cdpWs, js);
+                if (result) {
+                    log(`Pocket Agent: Dispatched ${eventType} event to selector ${selector} with path ${path}.`);
+                    break;
+                }
+            } catch (err) {
+                logError('Pocket Agent: Error handling ui_event for debuggerUrl ' + dbgUrl + ':', err);
+            } finally {
+                if (cdpWs && cdpWs.readyState === WebSocket.OPEN) cdpWs.close();
+            }
+        }
+    } catch (err) {
+        logError('Pocket Agent: Unhandled error in handleUiEvent:', err);
+    }
+}
 

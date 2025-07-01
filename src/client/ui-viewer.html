@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pocket Agent – UI Viewer</title>
+    <link href="/style.css" rel="stylesheet" />
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #1e1e1e; /* fallback */
+        }
+        #root {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+        }
+        /* ensure data pockets are clickable */
+        [data-pocket-path] {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentSelector = null;
+
+        socket.on('connect', () => {
+            console.log('[UI Viewer] Connected to server');
+            socket.emit('register', 'mobile');
+        });
+
+        socket.on('section_update', (data) => {
+            if (!data || !data.html) return;
+            currentSelector = data.selector;
+            document.getElementById('root').innerHTML = data.html;
+        });
+
+        // Delegate click events
+        document.getElementById('root').addEventListener('click', (e) => {
+            const pathAttr = e.target.getAttribute('data-pocket-path');
+            if (!pathAttr || !currentSelector) return;
+            socket.emit('ui_event', {
+                selector: currentSelector,
+                path: pathAttr,
+                eventType: 'click'
+            });
+        });
+    </script>
+</body>
+</html>

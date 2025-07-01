@@ -153,6 +153,22 @@ io.on('connection', (socket) => {
     // Here, you could further process messages, e.g., store them, broadcast to other clients, etc.
   });
 
+  // New: relay section (UI fragment) updates from desktop to mobile clients
+  socket.on('section_update', (data) => {
+    console.log(`[Server] Received section_update from ${socket.id} for selector ${data && data.selector}`);
+    if (activeConnections.mobile) {
+      io.to(activeConnections.mobile).emit('section_update', data);
+    }
+  });
+
+  // New: relay UI interaction events from mobile back to desktop client
+  socket.on('ui_event', (data) => {
+    console.log(`[Server] Forwarding ui_event from mobile to desktop. Selector: ${data && data.selector}, Path: ${data && data.path}`);
+    if (activeConnections.desktop) {
+      io.to(activeConnections.desktop).emit('ui_event', data);
+    }
+  });
+
   socket.on('disconnect', (reason) => {
     // Remove disconnected client
     Object.keys(activeConnections).forEach(key => {
@@ -166,6 +182,10 @@ io.on('connection', (socket) => {
   socket.on('connect_error', (err) => {
     console.error(`[Server] Client connection error for ${socket.id}: ${err.message}`);
   });
+});
+
+app.get('/view-ui', (req, res) => {
+    res.sendFile(path.join(__dirname, '../client/ui-viewer.html'));
 });
 
 const PORT = process.env.PORT || 3300;
