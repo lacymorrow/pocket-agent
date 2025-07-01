@@ -2,10 +2,10 @@ const vscode = require('vscode');
 const io = require('socket.io-client');
 const WebSocket = require('ws'); // Added for WebSocket communication
 
-// This should ideally come from a configuration or environment variable
-// Ensure this URL matches where your src/server/index.js is running
-const SERVER_URL = process.env.POCKET_AGENT_SERVER_URL || 'http://localhost:3300';
-const CURSOR_DEBUG_PORT = process.env.CURSOR_DEBUG_PORT || 9223; // Make debug port configurable
+// Default configuration values (can be overridden via VS Code settings)
+let SERVER_URL = process.env.POCKET_AGENT_SERVER_URL || 'http://localhost:3300';
+let CURSOR_DEBUG_PORT = process.env.CURSOR_DEBUG_PORT ? parseInt(process.env.CURSOR_DEBUG_PORT, 10) : 9223;
+let POLL_INTERVAL = process.env.POCKET_AGENT_POLL_INTERVAL ? parseInt(process.env.POCKET_AGENT_POLL_INTERVAL, 10) : 5000;
 
 let socket; // For connection to backend server
 let chatPollInterval;
@@ -322,6 +322,8 @@ function parseChatTextToStructuredData(chatText) {
 }
 
 async function fetchAndSendChatUpdate() {
+    // Ensure "fetch" is available in all supported Node versions (VS Code extension host runs on Node <18)
+    const { default: fetch } = await import('node-fetch');
     try {
         // First, check if logging is even possible here.
         if (typeof log !== 'function') {
@@ -429,6 +431,40 @@ function activate(context) {
     log("Pocket Agent: Entering activate function..."); // Now uses global log
     log('Pocket Agent: Activating extension...');
 
+    // -------------------------------------------------------------------
+    // Load user/workspace configuration
+    // -------------------------------------------------------------------
+    const pocketConfig = vscode.workspace.getConfiguration('pocketAgent');
+    SERVER_URL = pocketConfig.get('serverUrl', SERVER_URL);
+    CURSOR_DEBUG_PORT = pocketConfig.get('cursorDebugPort', CURSOR_DEBUG_PORT);
+    const cfgInterval = pocketConfig.get('pollInterval', POLL_INTERVAL);
+    if (typeof cfgInterval === 'number' && cfgInterval > 0) {
+        POLL_INTERVAL = cfgInterval;
+    }
+    log(`Pocket Agent: Using configuration => SERVER_URL=${SERVER_URL}, CURSOR_DEBUG_PORT=${CURSOR_DEBUG_PORT}, POLL_INTERVAL=${POLL_INTERVAL}ms`);
+
+    // Watch for configuration changes to update behaviour at runtime
+    const configWatcher = vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('pocketAgent')) {
+            const newCfg = vscode.workspace.getConfiguration('pocketAgent');
+            SERVER_URL = newCfg.get('serverUrl', SERVER_URL);
+            CURSOR_DEBUG_PORT = newCfg.get('cursorDebugPort', CURSOR_DEBUG_PORT);
+            const newInterval = newCfg.get('pollInterval', POLL_INTERVAL);
+            if (typeof newInterval === 'number' && newInterval > 0) {
+                POLL_INTERVAL = newInterval;
+            }
+            log(`Pocket Agent: Configuration changed => SERVER_URL=${SERVER_URL}, CURSOR_DEBUG_PORT=${CURSOR_DEBUG_PORT}, POLL_INTERVAL=${POLL_INTERVAL}ms`);
+
+            // Restart polling timer with new interval if necessary
+            if (chatPollInterval) {
+                clearInterval(chatPollInterval);
+                chatPollInterval = setInterval(fetchAndSendChatUpdate, POLL_INTERVAL);
+                log('Pocket Agent: Polling interval updated due to configuration change.');
+            }
+        }
+    });
+    context.subscriptions.push(configWatcher);
+
     // Register the command to read chat text using CDP
     let readChatDisposable = vscode.commands.registerCommand('pocketAgent.readChatText', async () => {
         try {
@@ -463,17 +499,8 @@ function activate(context) {
                 clearInterval(chatPollInterval);
             }
 
-            const pollIntervalEnv = process.env.POCKET_AGENT_POLL_INTERVAL;
-            const pollIntervalMs = parseInt(pollIntervalEnv) || 5000;
-            log(`Pocket Agent: Poll interval ENV is "${pollIntervalEnv}". Parsed interval: ${pollIntervalMs}ms.`);
-
-            if (isNaN(pollIntervalMs) || pollIntervalMs <= 0) {
-                logError(`Pocket Agent: Invalid poll interval ${pollIntervalMs}ms. Defaulting to 5000ms.`, null);
-                // pollIntervalMs = 5000; // Already handled by || 5000 but good to be explicit if logic changes
-            }
-
             log('Pocket Agent: Setting up setInterval for fetchAndSendChatUpdate.');
-            chatPollInterval = setInterval(fetchAndSendChatUpdate, pollIntervalMs);
+            chatPollInterval = setInterval(fetchAndSendChatUpdate, POLL_INTERVAL);
             log('Pocket Agent: setInterval for fetchAndSendChatUpdate has been set.');
 
             log('Pocket Agent: Attempting initial direct call to fetchAndSendChatUpdate...');
@@ -530,7 +557,7 @@ function activate(context) {
     log("Pocket Agent: After pushing main disposable, before final logs.");
 
     log('Pocket Agent: Extension activation complete.');
-    vscode.window.showInformationMessage('Pocket Agent Activated. Ensure Cursor is running with --remote-debugging-port=9223.');
+    vscode.window.showInformationMessage(`Pocket Agent Activated. Ensure Cursor is running with --remote-debugging-port=${CURSOR_DEBUG_PORT}.`);
 }
 
 function deactivate() {

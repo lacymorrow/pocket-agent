@@ -27,7 +27,29 @@
         "title": "Pocket Agent: Read Chat Text",
         "category": "Pocket Agent"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Pocket Agent",
+      "properties": {
+        "pocketAgent.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3300",
+          "description": "URL of the Pocket Agent backend server to which chat updates are sent."
+        },
+        "pocketAgent.pollInterval": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 1000,
+          "description": "Interval (in milliseconds) at which chat updates are polled and sent to the backend."
+        },
+        "pocketAgent.cursorDebugPort": {
+          "type": "number",
+          "default": 9223,
+          "minimum": 1000,
+          "description": "Remote debugging port that Cursor is launched with (passed via --remote-debugging-port)."
+        }
+      }
+    }
   },
   "scripts": {
     "start": "node src/server/index.js",

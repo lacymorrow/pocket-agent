@@ -17,6 +17,27 @@ A mobile interface for interacting with Cursor's composer remotely. This allows 
 npm install
 ```
 
+2. (Optional) Build the VS Code extension package
+```bash
+npm run package
+```
+
+The command above creates a `cursor-pocket-agent-x.y.z.vsix` file that you can share or publish to the VS Code Marketplace.
+
+## Configuration
+
+The extension exposes the following user/workspace settings (they can be accessed from **Settings → Extensions → Pocket Agent** or by editing `settings.json`).
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `pocketAgent.serverUrl` | `http://localhost:3300` | URL of the Pocket Agent backend server that receives chat updates. |
+| `pocketAgent.pollInterval` | `5000` | Interval (in ms) at which chat updates are collected and sent to the backend. |
+| `pocketAgent.cursorDebugPort` | `9223` | Remote-debugging port used when launching Cursor (`--remote-debugging-port`). |
+
+Changes to these settings are applied instantly—no need to reload VS Code.
+
+---
+
 2. Start the server:
 ```bash
 npm start
