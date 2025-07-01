@@ -33,7 +33,8 @@
     "start": "node src/server/index.js",
     "dev": "nodemon src/server/index.js",
     "package": "vsce package",
-    "install-extension": "vsce package -o ./cursor-pocket-agent.vsix && cursor --install-extension ./cursor-pocket-agent.vsix --force && rm ./cursor-pocket-agent.vsix"
+    "install-extension": "vsce package -o ./cursor-pocket-agent.vsix && cursor --install-extension ./cursor-pocket-agent.vsix --force && rm ./cursor-pocket-agent.vsix",
+    "like-bot": "node src/twitter_like_bot.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -42,7 +43,8 @@
     "node-fetch": "^3.3.2",
     "socket.io": "^4.7.2",
     "socket.io-client": "^4.7.2",
-    "ws": "^8.18.2"
+    "ws": "^8.18.2",
+    "twitter-api-v2": "^1.15.1"
   },
   "devDependencies": {
     "@types/vscode": "^1.70.0",

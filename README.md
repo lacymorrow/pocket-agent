@@ -40,4 +40,39 @@ This is intended for local network use only. If you need to access it from outsi
 For development with auto-reload:
 ```bash
 npm run dev
-``` 
+```
+
+## Twitter Like Bot
+
+This repository also includes a simple Twitter bot that automatically likes every reply to a chosen account.
+
+### Prerequisites
+1. A Twitter developer account with an application created.
+2. The following credentials from your Twitter application: API Key, API Key Secret, Access Token, Access Token Secret, and (optionally) a Bearer Token.
+3. Node.js >= 18 (to support native `fetch`).
+
+### Setup
+
+1. Install dependencies (if not already done):
+
+```bash
+npm install
+```
+
+2. Copy `.env.example` to `.env` and fill in your credentials:
+
+```bash
+cp .env.example .env
+# then edit .env in your editor
+```
+
+3. Run the bot:
+
+```bash
+npm run like-bot
+```
+
+The bot will poll Twitter every 60 seconds for new replies to `TARGET_USER_HANDLE` and like them automatically. The console will show each like action or any encountered errors.
+
+> **Note**
+> Liking tweets programmatically is a write action on Twitter's API and requires **OAuth 1a User Context** credentials. Make sure your application has the required access level. 
