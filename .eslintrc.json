@@ -1,0 +1,30 @@
+{
+  "env": {
+    "node": true,
+    "es2022": true,
+    "mocha": true
+  },
+  "extends": [
+    "eslint:recommended"
+  ],
+  "plugins": ["node"],
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "rules": {
+    "no-console": "off",
+    "node/no-unsupported-features/es-syntax": "off",
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
+  },
+  "globals": {
+    "log": "readonly",
+    "logError": "readonly",
+    "logWarn": "readonly"
+  },
+  "ignorePatterns": [
+    "node_modules/",
+    "src/server/**",
+    "*.vsix"
+  ]
+}

@@ -85,12 +85,12 @@
 
 <body>
 	<div class="container">
-		<div id="status" class="status">Connecting...</div>
+		<div id="status" class="status" role="status" aria-live="polite">Connecting...</div>
 		<div id="current-request" class="message-container" style="display: none;">
 			<div id="request-text" class="request"></div>
 			<div class="buttons">
-				<button class="approve" onclick="handleResponse(true)">Approve</button>
-				<button class="reject" onclick="handleResponse(false)">Reject</button>
+				<button class="approve" onclick="handleResponse(true)" aria-label="Approve request">Approve</button>
+				<button class="reject" onclick="handleResponse(false)" aria-label="Reject request">Reject</button>
 			</div>
 		</div>
 		<div id="no-requests" class="no-requests">No pending requests</div>

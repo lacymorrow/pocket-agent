@@ -61,4 +61,22 @@ This is intended for local network use only. If you need to access it from outsi
 For development with auto-reload:
 ```bash
 npm run dev
-``` 
+```
+
+## CI / CD
+
+This repository includes GitHub Actions workflows:
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| **CI** (`.github/workflows/ci.yml`) | Push & PR to `main` | Lints code, runs unit tests. |
+| **Release** (`.github/workflows/release.yml`) | Git tag `v*.*.*` | Packages the extension and (optionally) publishes it to the VS Code Marketplace – supply `VSCE_TOKEN` secret. |
+
+---
+
+## Code Quality
+
+* **ESLint** (`npm run lint`) – validates source code against best-practice rules.
+* **Prettier** (`npm run format`) – enforces consistent code style.
+
+The CI workflow will fail if ESLint reports any errors. 

@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
@@ -23,6 +24,19 @@ const io = new Server(server, {
 // Increase the payload limit for JSON requests
 // The default is 100kb, which can be too small for rich HTML content.
 app.use(express.json({ limit: '50mb' }));
+
+// ------------------------------------------------------------------
+// Basic rate limiting to protect /chat-update and other write routes
+// ------------------------------------------------------------------
+const apiLimiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10), // 1 minute default
+  max: parseInt(process.env.RATE_LIMIT_MAX || '60', 10), // limit each IP to 60 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(['/chat-update'], apiLimiter);
+
 app.use(express.static(path.join(__dirname, '../client')));
 // Also serve static files from project root for CSS access
 app.use(express.static(path.join(__dirname, '../../')));
@@ -144,18 +158,16 @@ io.on('connection', (socket) => {
       messages.forEach((msg, index) => {
         console.log(`  Message ${index + 1}:`);
         console.log(`    Sender: ${msg.sender}`);
-        console.log(`    Content: "${msg.content.replace(/\n/g, '\\\\n')}"`); // Escape newlines for cleaner logging
+        console.log(`    Content: "${msg.content.replace(/\n/g, '\\n')}"`);
         console.log(`    Timestamp: ${new Date(msg.timestamp).toLocaleString()}`);
       });
     } else {
       console.log('[Server] chatUpdate event received, but no messages or empty array.');
     }
-    // Here, you could further process messages, e.g., store them, broadcast to other clients, etc.
   });
 
   socket.on('disconnect', (reason) => {
-    // Remove disconnected client
-    Object.keys(activeConnections).forEach(key => {
+    Object.keys(activeConnections).forEach((key) => {
       if (activeConnections[key] === socket.id) {
         activeConnections[key] = null;
       }

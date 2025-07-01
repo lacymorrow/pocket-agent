@@ -1,6 +1,8 @@
 const vscode = require('vscode');
 const io = require('socket.io-client');
 const WebSocket = require('ws'); // Added for WebSocket communication
+const { validateConfig } = require('./util/config');
+const { measure } = require('./util/perf');
 
 // Default configuration values (can be overridden via VS Code settings)
 let SERVER_URL = process.env.POCKET_AGENT_SERVER_URL || 'http://localhost:3300';
@@ -342,42 +344,44 @@ async function fetchAndSendChatUpdate() {
 
     try {
         log('Fetching chat content from all relevant windows...');
-        const allChatHtmls = await readChatTextLogicJs(); // Returns an array of strings or nulls
+        const allChatHtmls = await measure('readChatTextLogicJs', () => readChatTextLogicJs());
 
         const validChatHtmls = allChatHtmls.filter(html => html !== null && typeof html === 'string');
 
         if (validChatHtmls.length > 0) {
             log(`Found ${validChatHtmls.length} chat content(s) to send to server...`);
 
-            // For now, we'll send the first valid HTML found to maintain compatibility
-            // with the server, which expects a single htmlContent.
-            // TODO: Modify server to accept an array and then send validChatHtmls.
-            const firstChatHtml = validChatHtmls[0];
-            // To send all, the body would be:
-            // body: JSON.stringify({
-            //     htmlContents: validChatHtmls, // Array of HTML strings
-            //     source: 'vscode-extension',
-            //     timestamp: new Date().toISOString()
-            // })
-            // And the server would need to be updated to handle `htmlContents` array.
+            await measure('sendChatUpdate', async () => {
+                // For now, we'll send the first valid HTML found to maintain compatibility
+                // with the server, which expects a single htmlContent.
+                // TODO: Modify server to accept an array and then send validChatHtmls.
+                const firstChatHtml = validChatHtmls[0];
+                // To send all, the body would be:
+                // body: JSON.stringify({
+                //     htmlContents: validChatHtmls, // Array of HTML strings
+                //     source: 'vscode-extension',
+                //     timestamp: new Date().toISOString()
+                // })
+                // And the server would need to be updated to handle `htmlContents` array.
 
-            const response = await fetch(`${SERVER_URL}/chat-update`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    htmlContent: firstChatHtml, // Sending only the first one for now
-                    source: 'vscode-extension',
-                    timestamp: new Date().toISOString()
-                })
+                const response = await fetch(`${SERVER_URL}/chat-update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        htmlContent: firstChatHtml, // Sending only the first one for now
+                        source: 'vscode-extension',
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                if (response.ok) {
+                    log('Chat HTML (first found) sent successfully to server.');
+                } else {
+                    const errorBody = await response.text();
+                    logError('Failed to send chat update. Status:', errorBody);
+                    vscode.window.showWarningMessage(`Pocket Agent: Failed to send chat update to server. Status: ${response.status}`);
+                }
             });
-
-            if (response.ok) {
-                log('Chat HTML (first found) sent successfully to server.');
-            } else {
-                const errorBody = await response.text();
-                logError('Failed to send chat update. Status:', errorBody);
-                vscode.window.showWarningMessage(`Pocket Agent: Failed to send chat update to server. Status: ${response.status}`);
-            }
         } else {
             log('No valid chat content found across all windows to send.');
         }
@@ -428,6 +432,14 @@ function activate(context) {
         }
     };
 
+    global.logWarn = (message, ...optionalParams) => {
+        const fullMessage = 'WARN: ' + message + (optionalParams.length > 0 ? ' ' + optionalParams.join(' ') : '');
+        console.warn(fullMessage);
+        if (pocketAgentOutputChannel) {
+            pocketAgentOutputChannel.appendLine(fullMessage);
+        }
+    };
+
     log("Pocket Agent: Entering activate function..."); // Now uses global log
     log('Pocket Agent: Activating extension...');
 
@@ -441,6 +453,21 @@ function activate(context) {
     if (typeof cfgInterval === 'number' && cfgInterval > 0) {
         POLL_INTERVAL = cfgInterval;
     }
+
+    // Validate and sanitize configuration
+    const { errors: validationErrors, validated } = validateConfig({
+        serverUrl: SERVER_URL,
+        pollInterval: POLL_INTERVAL,
+        cursorDebugPort: CURSOR_DEBUG_PORT,
+    });
+    if (validationErrors.length) {
+        validationErrors.forEach(err => logWarn(err));
+    }
+    // Override with sanitized values where available
+    SERVER_URL = validated.serverUrl || SERVER_URL;
+    POLL_INTERVAL = validated.pollInterval || POLL_INTERVAL;
+    CURSOR_DEBUG_PORT = validated.cursorDebugPort || CURSOR_DEBUG_PORT;
+
     log(`Pocket Agent: Using configuration => SERVER_URL=${SERVER_URL}, CURSOR_DEBUG_PORT=${CURSOR_DEBUG_PORT}, POLL_INTERVAL=${POLL_INTERVAL}ms`);
 
     // Watch for configuration changes to update behaviour at runtime
@@ -461,6 +488,18 @@ function activate(context) {
                 chatPollInterval = setInterval(fetchAndSendChatUpdate, POLL_INTERVAL);
                 log('Pocket Agent: Polling interval updated due to configuration change.');
             }
+
+            const { errors: valErrs, validated: valCfg } = validateConfig({
+                serverUrl: SERVER_URL,
+                pollInterval: POLL_INTERVAL,
+                cursorDebugPort: CURSOR_DEBUG_PORT,
+            });
+            if (valErrs.length) {
+                valErrs.forEach(err => logWarn(err));
+            }
+            SERVER_URL = valCfg.serverUrl || SERVER_URL;
+            POLL_INTERVAL = valCfg.pollInterval || POLL_INTERVAL;
+            CURSOR_DEBUG_PORT = valCfg.cursorDebugPort || CURSOR_DEBUG_PORT;
         }
     });
     context.subscriptions.push(configWatcher);
