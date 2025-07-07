@@ -1,0 +1,194 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Security Considerations
+
+Security model and best practices for the Pocket Agent system.
+
+## Authentication Architecture
+
+### GitHub OAuth Flow
+1. Users authenticate with GitHub OAuth on web interface
+2. VS Code extension uses GitHub OAuth provider from VS Code API
+3. Extension exchanges GitHub token for service JWT via frontend API
+4. Service JWT used for all extension API requests
+
+### Token Management
+- **Web Sessions**: Managed by Auth.js with secure HTTP-only cookies
+- **Service Tokens**: JWT with 7-day expiration, stored in extension context
+- **GitHub Tokens**: Never stored permanently, exchanged immediately
+
+## Data Isolation
+
+### User-Scoped Redis Keys
+```
+user:{userId}:chats:list          # User's chat list
+user:{userId}:chat:{windowId}     # Individual chat content
+user:{userId}:commands:{windowId} # Command queue
+```
+
+### Access Control
+- All API endpoints validate user authentication
+- Redis operations use user ID from authenticated session
+- No cross-user data access possible
+- Extension can only access data for authenticated user
+
+## Authentication Implementation
+
+### Extension Authentication
+- GitHub OAuth integration via VS Code's authentication API
+- Service token exchange with frontend application
+- JWT storage in extension's secure context storage
+
+### Token Management
+- JWT tokens received from frontend after GitHub OAuth exchange
+- 7-day expiration with automatic refresh capability
+- Secure storage using VS Code's secrets API
+
+## Data Security
+
+### Sensitive Data Handling
+- **Chat HTML**: Stored as-is in Redis, no server-side processing
+- **User Credentials**: Never stored, only authentication tokens
+- **GitHub Tokens**: Exchanged immediately, not persisted
+
+### HTML Content Safety
+- Chat HTML captured and sent without modification to preserve functionality
+- Extension only captures content, does not process or render HTML
+- Frontend handles HTML sanitization and safe rendering
+
+## Network Security
+
+### Network Communication
+- Extension communicates only with configured frontend URL
+- Default configuration restricted to localhost for development
+- Production deployment requires HTTPS for OAuth compliance
+
+### HTTPS Requirements
+- Local development uses HTTP (localhost exception)
+- Production deployment requires HTTPS
+- GitHub OAuth enforces HTTPS for production callbacks
+
+### CDP Security
+- Chrome DevTools Protocol connections restricted to localhost only
+- Extension only connects to Cursor's debug port (9223)
+- No external network access for CDP operations
+
+## Environment Security
+
+### Configuration Security
+- Extension settings managed via VS Code's configuration API
+- Sensitive values not stored in extension files
+- Frontend handles environment variable management
+
+### Extension Configuration
+```json
+{
+  "pocketAgent.serverUrl": "http://localhost:3000",
+  "pocketAgent.debugPort": 9223
+}
+```
+
+Environment variables:
+- `POCKET_AGENT_SERVER_URL` - Frontend server URL
+- `CURSOR_DEBUG_PORT` - Cursor debug port override
+
+## API Security
+
+### Input Validation
+- All API routes validate inputs with Zod schemas
+- Proper error handling without information leakage
+- Rate limiting considerations for production
+
+### Authorization Patterns
+```typescript
+// Session-based (web interface)
+const session = await auth()
+if (!session?.user?.id) {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+}
+
+// JWT-based (extension)
+const token = request.headers.get("authorization")?.replace("Bearer ", "")
+const decoded = jwt.verify(token, process.env.AUTH_SECRET!)
+```
+
+## Redis Security
+
+### Key Patterns
+- Always prefix with user ID: `user:{userId}:*`
+- Use consistent naming for easy access control
+- Implement TTL for temporary data (commands, sessions)
+
+### Connection Security
+- Use secure Redis URLs with authentication
+- Consider Redis AUTH and SSL for production
+- Monitor Redis access logs for unusual patterns
+
+## GitHub OAuth Security
+
+### OAuth App Configuration
+- Restrict callback URLs to actual deployment domains
+- Use minimal required scopes: `user:email`, `read:user`
+- Regular rotation of GitHub OAuth app secrets
+
+### Token Handling
+- Never expose GitHub tokens to client-side code
+- Exchange tokens server-side only
+- Log authentication events for monitoring
+
+## Production Security Checklist
+
+### Deployment Security
+- [ ] HTTPS enforced for all traffic
+- [ ] Secure cookie settings enabled
+- [ ] CORS restricted to actual domains
+- [ ] Environment variables properly secured
+- [ ] Database/Redis connections encrypted
+
+### Monitoring & Logging
+- [ ] Authentication events logged
+- [ ] Failed authentication attempts monitored
+- [ ] Unusual API access patterns detected
+- [ ] Error logs reviewed regularly
+
+### Access Control
+- [ ] User data isolation verified
+- [ ] API endpoint authentication tested
+- [ ] Redis key patterns validated
+- [ ] Extension authentication flow tested
+
+## Security Best Practices
+
+### Development
+- Use different GitHub OAuth apps for dev/prod
+- Never commit secrets or credentials
+- Test authentication flows thoroughly
+- Validate all user inputs
+
+### Maintenance
+- Regular dependency updates for security patches
+- Monitor for new vulnerabilities in dependencies
+- Review authentication logs periodically
+- Update GitHub OAuth app settings as needed
+
+### Incident Response
+- Plan for token revocation if compromise suspected
+- Redis key cleanup procedures
+- User notification process for security events
+- Backup authentication method if GitHub OAuth fails
+
+## Known Limitations
+
+### Current Security Gaps
+- HTML content not sanitized (relies on trusted source)
+- No rate limiting implemented (consider for production)
+- Local CDP connections not encrypted (localhost only)
+
+### Future Improvements
+- Implement content sanitization for HTML
+- Add rate limiting middleware
+- Consider end-to-end encryption for sensitive data
+- Implement audit logging for all user actions

@@ -1,0 +1,64 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Pocket Agent Extension Overview
+
+This repository contains the VS Code extension component of the Pocket Agent system for remotely controlling Cursor's AI chat sessions.
+
+## Extension Architecture
+
+The VS Code extension captures chat data from Cursor and communicates with a separate web frontend for remote monitoring and control.
+
+### Key Files
+
+- [src/cursor-plugin.js](mdc:pocket-agent/src/cursor-plugin.js) - Main extension entry point and CDP integration
+- [src/config.js](mdc:pocket-agent/src/config.js) - Configuration management with VS Code settings
+- [src/constants.js](mdc:pocket-agent/src/constants.js) - Constants including server URLs and OAuth scopes
+- [src/cdpHelper.js](mdc:pocket-agent/src/cdpHelper.js) - Chrome DevTools Protocol helpers
+- [src/logger.js](mdc:pocket-agent/src/logger.js) - Logging utilities
+- [package.json](mdc:pocket-agent/package.json) - Extension manifest and dependencies
+
+## Core Functionality
+
+### Chrome DevTools Protocol Integration
+- Connects to Cursor's debug port (default: 9223)
+- Extracts chat HTML content from active windows
+- Injects messages back into Cursor chat interface
+
+### Authentication
+- GitHub OAuth integration via VS Code API
+- Service token exchange with frontend
+- JWT-based API authentication
+
+### Configuration
+- VS Code settings integration
+- Environment variable support
+- Configurable server URL and debug port
+
+## API Communication
+
+The extension communicates with the frontend via HTTP endpoints:
+
+- `POST /api/auth/vscode/github-exchange` - Token exchange
+- `POST /api/chat/update` - Send chat data
+- `GET /api/commands/poll-outgoing/[windowId]` - Poll for commands
+
+## Documentation
+
+- [HANDOFF.md](mdc:pocket-agent/HANDOFF.md) - Complete project documentation
+- [README.md](mdc:pocket-agent/README.md) - Setup and usage instructions
+- [.cursor/rules/](mdc:pocket-agent/.cursor/rules) - Detailed technical documentation
+
+## System Integration
+
+This extension works with a separate Next.js frontend application that provides:
+- Web interface for chat monitoring
+- Mobile-responsive design
+- User authentication and data storage
+- Real-time updates via polling
+
+
+
+

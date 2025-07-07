@@ -1,40 +1,59 @@
+---
+description:
+globs:
+alwaysApply: false
+---
 # Project Overview
 
 This project is a VS Code extension called "Pocket Agent" that provides a web interface to view captured Cursor chat data and send messages back to Cursor windows.
 
 ## Key Components
+# Pocket Agent Extension - Repository Overview
 
--   **VS Code Extension**: [`src/cursor-plugin.js`](mdc:src/cursor-plugin.js) - Main entry point for the extension. Captures chat data from Cursor windows using CDP, sends it to the backend server, and receives messages from the server to type back into Cursor.
--   **Express Backend Server**: [`src/server/index.js`](mdc:src/server/index.js) - Receives chat data, serves a tabbed web view of the chats, and relays messages from the web view to the extension via WebSockets.
--   **Package Definition**: [`package.json`](mdc:package.json) - Extension metadata and dependencies.
--   **Standalone Test Script**: [`test-type-in-cursor.js`](mdc:test-type-in-cursor.js) - A Node.js script for testing the CDP-based typing functionality directly against a Cursor window, without needing the full extension and server.
--   **Styling for Web View**: [`pocket-chat.css`](mdc:pocket-chat.css) - Main CSS file for styling the chat content in the web view to mimic Cursor's appearance.
--   **Chat HTML Snapshot (Example)**: [`html`](mdc:html) - An example of the HTML structure captured from Cursor's chat panel, used for styling reference.
+This repository contains the VS Code extension component of the Pocket Agent system for remotely controlling Cursor's AI chat sessions.
 
-## Core Functionality
+## Repository Contents
 
-### Extension ([`src/cursor-plugin.js`](mdc:src/cursor-plugin.js))
-1.  **CDP Interaction**: Connects to Cursor's debug port (default: `9223`, configurable via `CURSOR_DEBUG_PORT`) using Chrome DevTools Protocol (CDP).
-2.  **Chat Content Extraction**: Periodically (default: `5000ms`, configurable via `POCKET_AGENT_POLL_INTERVAL`) polls all active Cursor windows, extracting the `outerHTML` of their chat containers and their `webSocketDebuggerUrl` as a unique ID.
-3.  **Data Transmission to Server**: Sends the extracted HTML, name, and ID for each chat window as a JSON payload to the `/chat-update` endpoint of the backend server.
-4.  **Receiving and Typing Messages**: Listens for `sendMessageToWindow` Socket.IO events from the server. Upon receiving one, it uses CDP to connect to the specified window ID, click input elements if necessary, focus the chat input, type the message, and simulate Enter.
-5.  **Logging**: Provides output logging to a dedicated "Pocket Agent" VS Code output channel.
+This extension repository provides:
 
-### Server ([`src/server/index.js`](mdc:src/server/index.js))
-1.  **Data Reception & Storage**: Receives chat data at `/chat-update` and stores it in memory (`activeConversationsStore`).
-2.  **Tabbed Chat Web View (`/view-chat`)**: Serves a main HTML page that dynamically creates tabs for each active conversation. Each tab loads its content via an iframe.
-3.  **Individual Chat Content & Input (`/get-chat-html`)**: Serves the HTML for a single chat conversation (for iframes), including the chat messages and a message input form (textarea and send button).
-4.  **Message Relaying (`/send-to-cursor`)**: Receives messages submitted from the web view's input form. It then emits a `sendMessageToWindow` Socket.IO event, including the target window ID and message text, to the connected VS Code extension.
-5.  **WebSocket Server**: Uses Socket.IO for real-time communication between the server, the web view (for tab updates), and the VS Code extension (for relaying messages).
-6.  **Static Files**: Serves static client assets from [`src/client/`](mdc:src/client) and CSS from the project root.
+1. **Chrome DevTools Protocol Integration** - Captures chat data from Cursor
+2. **GitHub OAuth Authentication** - Secure authentication flow
+3. **API Communication** - Interfaces with separate frontend application
+4. **Message Injection** - Sends messages back to Cursor from web interface
 
-## Configuration (Environment Variables for Extension)
--   `POCKET_AGENT_SERVER_URL`: Backend server URL (default: `http://localhost:3300`).
--   `CURSOR_DEBUG_PORT`: Debug port for CDP (default: `9223`).
--   `POCKET_AGENT_POLL_INTERVAL`: Interval for polling chat updates (default: `5000ms`).
+## System Architecture
 
-## Related Workflows & Rules
--   Extension Workflow Details: [pocket-agent-extension-workflow.mdc](mdc:.cursor/rules/pocket-agent-extension-workflow.mdc)
--   Server Workflow Details: [server-workflow.mdc](mdc:.cursor/rules/server-workflow.mdc)
--   Testing Typing Functionality: [pocket-agent-testing.mdc](mdc:.cursor/rules/pocket-agent-testing.mdc)
--   Chat Styling Strategy (Reference): [chat-styling-strategy.mdc](mdc:.cursor/rules/chat-styling-strategy.mdc) *(Note: This rule might need review/creation based on current styling)*
+The complete Pocket Agent system consists of:
+
+1. **VS Code Extension** (this repository) - Captures chat data from Cursor via CDP
+2. **Next.js Frontend** (separate repository) - Provides web interface with real-time updates
+3. **Redis/KV Storage** - Handles data persistence and communication between components
+
+## Key Features
+
+- **Real-time Chat Capture**: Extracts live chat content from Cursor windows
+- **Bidirectional Communication**: Receives commands from web interface and executes in Cursor
+- **GitHub OAuth Integration**: Secure authentication using VS Code's OAuth provider
+- **Leader Election**: Manages multiple extension instances to prevent conflicts
+- **Configuration Management**: VS Code settings and environment variable support
+
+## Data Flow
+
+1. Extension captures chat HTML from Cursor via Chrome DevTools Protocol
+2. Extension authenticates with GitHub OAuth and exchanges for service JWT token
+3. Extension sends chat data to frontend API endpoints
+4. Extension polls for outgoing commands from web interface
+5. Extension injects received messages into Cursor chat interface
+
+## Technology Stack
+
+- **Runtime**: Node.js with VS Code Extension API
+- **Protocol**: Chrome DevTools Protocol for Cursor communication
+- **Authentication**: GitHub OAuth with JWT token exchange
+- **Configuration**: VS Code settings integration
+
+## Documentation
+
+- [HANDOFF.md](mdc:pocket-agent/HANDOFF.md) - Complete project documentation and deployment guide
+- [README.md](mdc:pocket-agent/README.md) - Extension setup and usage instructions
+- [.cursor/rules/extension-architecture.mdc](mdc:pocket-agent/.cursor/rules/extension-architecture.mdc) - Detailed extension architecture

@@ -1,0 +1,125 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Next.js Frontend Architecture
+
+The Pocket Agent frontend is a modern Next.js 14 application that provides a web interface for monitoring and interacting with Cursor chat sessions.
+
+## Project Structure
+
+### Core Application
+- [pocket-agent-frontend/src/app/(app)/](mdc:pocket-agent-frontend/src/app/(app)/) - Main application routes
+- [pocket-agent-frontend/src/app/api/](mdc:pocket-agent-frontend/src/app/api/) - API routes for extension communication
+
+### Authentication
+- [pocket-agent-frontend/src/app/(app)/(authentication)/](mdc:pocket-agent-frontend/src/app/(app)/(authentication)/) - Auth pages (sign-in, sign-up, etc.)
+- [pocket-agent-frontend/src/lib/auth.ts](mdc:pocket-agent-frontend/src/lib/auth.ts) - Auth.js configuration
+
+### Chat Interface
+- [pocket-agent-frontend/src/app/(app)/chat/](mdc:pocket-agent-frontend/src/app/(app)/chat/) - Chat monitoring interface
+- [pocket-agent-frontend/src/app/(app)/chat/_components/](mdc:pocket-agent-frontend/src/app/(app)/chat/_components/) - Chat UI components
+
+### Components & UI
+- [pocket-agent-frontend/src/components/](mdc:pocket-agent-frontend/src/components/) - Reusable UI components
+- [pocket-agent-frontend/src/components/ui/](mdc:pocket-agent-frontend/src/components/ui/) - Shadcn/UI components
+
+## Key API Routes
+
+### Extension Authentication
+- [pocket-agent-frontend/src/app/api/auth/vscode/github-exchange/route.ts](mdc:pocket-agent-frontend/src/app/api/auth/vscode/github-exchange/route.ts) - Exchange GitHub tokens for service JWTs
+
+### Chat Data Management
+- [pocket-agent-frontend/src/app/api/chat/update/route.ts](mdc:pocket-agent-frontend/src/app/api/chat/update/route.ts) - Receive chat updates from extension
+- [pocket-agent-frontend/src/app/api/chats/list/route.ts](mdc:pocket-agent-frontend/src/app/api/chats/list/route.ts) - List active chat sessions
+- [pocket-agent-frontend/src/app/api/chat/[windowId]/route.ts](mdc:pocket-agent-frontend/src/app/api/chat/[windowId]/route.ts) - Get specific chat content
+
+### Message Communication
+- [pocket-agent-frontend/src/app/api/message/send-to-cursor/route.ts](mdc:pocket-agent-frontend/src/app/api/message/send-to-cursor/route.ts) - Send messages to Cursor
+- [pocket-agent-frontend/src/app/api/commands/poll-outgoing/[windowId]/route.ts](mdc:pocket-agent-frontend/src/app/api/commands/poll-outgoing/[windowId]/route.ts) - Poll for outgoing commands
+
+## Core Components
+
+### Chat Dashboard
+- [pocket-agent-frontend/src/app/(app)/chat/_components/chat-dashboard-client.tsx](mdc:pocket-agent-frontend/src/app/(app)/chat/_components/chat-dashboard-client.tsx) - Main chat interface with tabs
+- [pocket-agent-frontend/src/app/(app)/chat/_components/chat-content-view.tsx](mdc:pocket-agent-frontend/src/app/(app)/chat/_components/chat-content-view.tsx) - Individual chat content display
+- [pocket-agent-frontend/src/app/(app)/chat/_components/message-form.tsx](mdc:pocket-agent-frontend/src/app/(app)/chat/_components/message-form.tsx) - Message input form
+
+## Data Storage
+
+### Redis/KV Service
+- [pocket-agent-frontend/src/server/services/kv.ts](mdc:pocket-agent-frontend/src/server/services/kv.ts) - Redis operations for chat data storage
+
+### Database (Optional)
+- [pocket-agent-frontend/src/server/db/schema.ts](mdc:pocket-agent-frontend/src/server/db/schema.ts) - PostgreSQL schema definitions
+- [pocket-agent-frontend/drizzle.config.ts](mdc:pocket-agent-frontend/drizzle.config.ts) - Drizzle ORM configuration
+
+## Configuration
+
+### Environment Setup
+- [pocket-agent-frontend/src/env.ts](mdc:pocket-agent-frontend/src/env.ts) - Environment variable validation with T3 Env
+- [pocket-agent-frontend/.env.example](mdc:pocket-agent-frontend/.env.example) - Environment template
+
+### Framework Configuration
+- [pocket-agent-frontend/next.config.ts](mdc:pocket-agent-frontend/next.config.ts) - Next.js configuration
+- [pocket-agent-frontend/tailwind.config.ts](mdc:pocket-agent-frontend/tailwind.config.ts) - Tailwind CSS configuration
+- [pocket-agent-frontend/tsconfig.json](mdc:pocket-agent-frontend/tsconfig.json) - TypeScript configuration
+
+## Authentication Flow
+
+1. User visits frontend and is redirected to GitHub OAuth
+2. After successful authentication, user session is created
+3. VS Code extension exchanges GitHub token for service JWT
+4. Service JWT is used for all API requests from extension
+5. Web interface uses session cookies for authentication
+
+## Real-time Updates
+
+### Polling Strategy
+- Chat list polls every 5 seconds for new sessions
+- Chat content polls every 3 seconds for updates
+- Command polling from extension every few seconds
+
+### Data Flow
+1. Extension sends chat data to `/api/chat/update`
+2. Data stored in Redis with user-scoped keys
+3. Web interface polls endpoints for updates
+4. UI automatically refreshes with new content
+
+## Security Features
+
+- **User Isolation**: Redis keys scoped by user ID
+- **JWT Authentication**: Service tokens for extension API access
+- **Session Management**: Secure cookie-based sessions for web interface
+- **CORS Configuration**: Proper cross-origin request handling
+- **HTML Sanitization**: Safe rendering of chat content
+
+## Styling & UI
+
+- **Tailwind CSS**: Utility-first CSS framework
+- **Shadcn/UI**: High-quality component library
+- **Dark Mode**: Automatic theme switching support
+- **Responsive Design**: Mobile-first approach with proper breakpoints
+- **Typography**: Prose styling for chat content display
+
+## Dependencies
+
+### Core Framework
+- Next.js 14 with App Router
+- React 19 with TypeScript
+- Auth.js for authentication
+
+### Styling & UI
+- Tailwind CSS + Shadcn/UI components
+- Lucide React icons
+- Framer Motion for animations
+
+### Data & Storage
+- Redis/Vercel KV for real-time data
+- Drizzle ORM + PostgreSQL (optional)
+- Zod for runtime validation
+
+
+
+

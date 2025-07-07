@@ -1,0 +1,88 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# VS Code Extension Architecture
+
+The Pocket Agent VS Code extension is responsible for capturing chat data from Cursor and facilitating bidirectional communication with the web frontend.
+
+## Core Files
+
+### Main Entry Point
+- [pocket-agent/src/cursor-plugin.js](mdc:pocket-agent/src/cursor-plugin.js) - Primary extension logic and CDP integration
+
+### Configuration & Utilities
+- [pocket-agent/src/config.js](mdc:pocket-agent/src/config.js) - Extension configuration management
+- [pocket-agent/src/constants.js](mdc:pocket-agent/src/constants.js) - Constants including server URLs and GitHub OAuth scopes
+- [pocket-agent/src/logger.js](mdc:pocket-agent/src/logger.js) - Logging utilities for debug output
+
+### Chrome DevTools Protocol
+- [pocket-agent/src/cdpHelper.js](mdc:pocket-agent/src/cdpHelper.js) - CDP integration for chat capture and message injection
+
+### Extension Metadata
+- [pocket-agent/package.json](mdc:pocket-agent/package.json) - Extension manifest and dependencies
+- [pocket-agent/src/extension.js](mdc:pocket-agent/src/extension.js) - Extension activation and command registration
+
+## Key Functionality
+
+### Authentication Flow
+1. User triggers "Pocket Agent: Sign In" command
+2. Extension initiates GitHub OAuth flow via VS Code's authentication API
+3. Extension exchanges GitHub token for service JWT with frontend
+4. Service token stored for API requests
+
+### Chat Data Capture
+1. Extension connects to Cursor's debug port (default: 9223) via CDP
+2. Periodically polls all active Cursor windows for chat content
+3. Extracts HTML from chat containers using DOM queries
+4. Sends data to frontend `/api/chat/update` endpoint
+
+### Message Sending (Web → Cursor)
+1. Extension polls `/api/commands/poll-outgoing/[windowId]` for pending messages
+2. When messages found, uses CDP to focus Cursor chat input
+3. Types message content and simulates Enter key press
+4. Handles focus management and error scenarios
+
+### Leader Election
+- Multiple extension instances use shared storage to elect a single "leader"
+- Only the leader instance performs polling and data capture
+- Prevents duplicate requests and data conflicts
+
+## Configuration Options
+
+### VS Code Settings
+```json
+{
+  "pocketAgent.serverUrl": "http://localhost:3000",
+  "pocketAgent.debugPort": 9223
+}
+```
+
+### Environment Variables
+- `POCKET_AGENT_SERVER_URL` - Override server URL
+- `CURSOR_DEBUG_PORT` - Override Cursor debug port
+
+## Error Handling
+
+- Comprehensive logging to VS Code Output Panel
+- Graceful degradation when Cursor debug port unavailable
+- Retry logic for network requests
+- User-friendly error messages for common issues
+
+## Dependencies
+
+- `vscode` - VS Code extension API
+- `ws` - WebSocket client for CDP communication
+- Node.js built-in modules (http, fs, path, etc.)
+
+## Security Considerations
+
+- GitHub OAuth tokens securely exchanged for service JWTs
+- Service tokens have limited 7-day lifespan
+- Extension only sends captured HTML (no sensitive data)
+- CDP connections restricted to localhost only
+
+
+
+

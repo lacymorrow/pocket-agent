@@ -1,0 +1,179 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Development Workflow
+
+Guidelines for developing and maintaining the Pocket Agent system effectively.
+
+## Project Setup
+
+### Initial Setup
+1. Clone this extension repository
+2. Install dependencies: `npm install`
+3. Set up the separate frontend application (see project documentation)
+4. Configure extension settings in VS Code
+5. Ensure Redis server is available for frontend
+
+### Development Environment
+```bash
+# Terminal 1: Extension development
+npm install
+npm run compile --watch  # Optional for development
+
+# Terminal 2: Install extension for testing
+npm run install-extension
+
+# Note: Frontend and Redis setup required separately
+```
+
+## Common Development Tasks
+
+### Adding New Extension Features
+1. Edit files in `src/` directory
+2. Key files: [cursor-plugin.js](mdc:pocket-agent/src/cursor-plugin.js), [cdpHelper.js](mdc:pocket-agent/src/cdpHelper.js)
+3. Update configuration in [config.js](mdc:pocket-agent/src/config.js) if needed
+4. Add API communication logic if required
+5. Test with `npm run install-extension`
+
+### Modifying Extension Functionality
+1. Edit files in `pocket-agent/src/`
+2. Key files: [cursor-plugin.js](mdc:pocket-agent/pocket-agent/src/cursor-plugin.js), [cdpHelper.js](mdc:pocket-agent/pocket-agent/src/cdpHelper.js)
+3. Update configuration in [config.js](mdc:pocket-agent/pocket-agent/src/config.js) if needed
+4. Test with `npm run install-extension`
+5. Check logs in VS Code Output Panel
+
+### Authentication Changes
+1. Extension OAuth: Update scopes in [constants.js](mdc:pocket-agent/src/constants.js)
+2. Token exchange logic in extension authentication flow
+3. Update JWT handling and storage in extension context
+4. Test full authentication flow with frontend
+
+## Testing Guidelines
+
+### Extension Testing
+```bash
+cd pocket-agent
+npm test                    # Run unit tests
+npm run install-extension  # Install for manual testing
+```
+
+### Manual Testing
+1. Install extension with `npm run install-extension`
+2. Open VS Code/Cursor and activate extension
+3. Test authentication flow with GitHub
+4. Verify chat capture and message sending
+5. Check logs in VS Code Output Panel
+
+### Integration Testing
+1. Ensure frontend application is running
+2. Install and activate extension
+3. Open Cursor with active chat
+4. Test authentication flow
+5. Verify extension sends chat data to frontend
+6. Test receiving and executing messages from frontend
+
+## Code Quality Standards
+
+### TypeScript
+- Use strict TypeScript configuration ([tsconfig.json](mdc:pocket-agent/pocket-agent-frontend/tsconfig.json))
+- Define proper interfaces for API requests/responses
+- Avoid `any` types - use proper type definitions
+
+### Error Handling
+- Implement comprehensive error handling in API routes
+- Use proper HTTP status codes
+- Log errors appropriately for debugging
+- Provide user-friendly error messages
+
+### Security Practices
+- Validate all inputs with Zod schemas
+- Use user-scoped Redis keys for data isolation
+- Never expose sensitive data in client-side code
+- Implement proper CORS configuration
+
+### Performance Optimization
+- Use efficient Redis key patterns
+- Implement proper caching strategies
+- Optimize polling intervals for real-time updates
+- Monitor bundle size and loading performance
+
+## File Organization
+
+### Adding New Files
+- **Extension**: Place in `src/` with descriptive names
+- **Utilities**: Place shared logic in `src/` directory
+- **Tests**: Place test files adjacent to source files with `.test.js` suffix
+- **Configuration**: Update `package.json` for new dependencies
+
+### Naming Conventions
+- Use kebab-case for file names and directories
+- Use PascalCase for React components
+- Use camelCase for functions and variables
+- Use UPPER_SNAKE_CASE for constants
+
+## Git Workflow
+
+### Branch Strategy
+- `main` - Production-ready code
+- `develop` - Integration branch for features
+- `feature/*` - Individual feature branches
+- `hotfix/*` - Critical bug fixes
+
+### Commit Messages
+- Use conventional commit format: `type(scope): description`
+- Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
+- Examples: `feat(extension): add chat capture functionality`
+
+## Environment Management
+
+### Development
+- Use `.env.local` for local environment variables
+- Configure GitHub OAuth for localhost
+- Use local Redis instance or development KV
+
+### Production
+- Set up production environment variables
+- Configure GitHub OAuth for production domain
+- Use production Redis/KV service
+- Enable proper CORS and security headers
+
+## Documentation Updates
+
+### When to Update Documentation
+- New API endpoints or changes to existing ones
+- Changes to authentication flow
+- New configuration options
+- Architectural changes
+
+### Key Documentation Files
+- [HANDOFF.md](mdc:pocket-agent/HANDOFF.md) - Overall project status and deployment
+- [README.md](mdc:pocket-agent/README.md) - Extension setup and usage
+- Cursor rules in `.cursor/rules/` - Component-specific documentation
+
+## Debugging Common Issues
+
+### Extension Not Connecting
+1. Check VS Code extension is signed in with GitHub
+2. Verify frontend is running on correct port (3000)
+3. Check extension configuration in VS Code settings
+4. Review extension logs in Output Panel
+
+### Authentication Failures
+1. Verify GitHub OAuth app configuration
+2. Check environment variables are set correctly
+3. Ensure JWT token generation is working
+4. Test token exchange endpoint manually
+
+### Chat Data Not Updating
+1. Check Cursor debug port availability (9223)
+2. Verify Redis connection and data storage
+3. Test API endpoints individually
+4. Check polling intervals and error handling
+
+### Performance Issues
+1. Monitor Redis memory usage and key patterns
+2. Check polling frequency and optimize if needed
+3. Profile frontend bundle size and loading times
+4. Review error logs for bottlenecks

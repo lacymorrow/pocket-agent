@@ -1,0 +1,153 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# API Routes Reference
+
+The frontend provides a comprehensive API for communication between the VS Code extension and the web interface.
+
+## Authentication Endpoints
+
+### GitHub Token Exchange
+- **POST** `/api/auth/vscode/github-exchange` - [route.ts](mdc:pocket-agent/pocket-agent-frontend/src/app/api/auth/vscode/github-exchange/route.ts)
+  - Exchanges GitHub OAuth tokens for service JWTs
+  - Used by VS Code extension during authentication
+  - Returns JWT token with 7-day expiration
+
+## Chat Data Endpoints
+
+### Chat Updates
+- **POST** `/api/chat/update` - [route.ts](mdc:pocket-agent/pocket-agent-frontend/src/app/api/chat/update/route.ts)
+  - Receives chat content updates from VS Code extension
+  - Stores data in Redis with user-scoped keys
+  - Requires JWT authentication
+
+### Chat Listing
+- **GET** `/api/chats/list` - [route.ts](mdc:pocket-agent/pocket-agent-frontend/src/app/api/chats/list/route.ts)
+  - Returns list of active chat sessions for authenticated user
+  - Used by web interface for tab navigation
+  - Includes metadata: windowId, name, lastUpdated
+
+### Individual Chat Content
+- **GET** `/api/chat/[windowId]` - [route.ts](mdc:pocket-agent/pocket-agent-frontend/src/app/api/chat/[windowId]/route.ts)
+  - Returns specific chat content by window ID
+  - Includes HTML content, name, and last updated timestamp
+  - User-scoped access (users can only see their own chats)
+
+## Message Communication
+
+### Send Message to Cursor
+- **POST** `/api/message/send-to-cursor` - [route.ts](mdc:pocket-agent/pocket-agent-frontend/src/app/api/message/send-to-cursor/route.ts)
+  - Queues messages to be sent to Cursor
+  - Used by web interface message form
+  - Stores commands in Redis for extension polling
+
+### Command Polling
+- **GET** `/api/commands/poll-outgoing/[windowId]` - [route.ts](mdc:pocket-agent/pocket-agent-frontend/src/app/api/commands/poll-outgoing/[windowId]/route.ts)
+  - Polled by VS Code extension for pending commands
+  - Returns queued messages for specific window
+  - Removes messages from queue after retrieval
+
+## Authentication Requirements
+
+### Service Token (Extension)
+- Required for: `/api/chat/update`, `/api/commands/poll-outgoing/[windowId]`
+- Format: `Authorization: Bearer <jwt-token>`
+- Token obtained via `/api/auth/vscode/github-exchange`
+
+### Session Cookie (Web Interface)
+- Required for: `/api/chats/list`, `/api/chat/[windowId]`, `/api/message/send-to-cursor`
+- Managed automatically by Auth.js
+- GitHub OAuth-based authentication
+
+## Data Storage Keys
+
+### Redis Key Patterns
+```
+user:{userId}:chats:list          # List of active chat IDs
+user:{userId}:chat:{windowId}     # Individual chat content
+user:{userId}:commands:{windowId} # Outgoing command queue
+```
+
+## Request/Response Formats
+
+### Chat Update Request
+```json
+{
+  "windowId": "string",
+  "name": "string",
+  "html": "string"
+}
+```
+
+### Chat List Response
+```json
+[
+  {
+    "windowId": "string",
+    "name": "string",
+    "lastUpdated": "timestamp"
+  }
+]
+```
+
+### Send Message Request
+```json
+{
+  "windowId": "string",
+  "messageText": "string"
+}
+```
+
+### Command Poll Response
+```json
+{
+  "commands": [
+    {
+      "messageText": "string",
+      "timestamp": "number"
+    }
+  ]
+}
+```
+
+## Error Handling
+
+### Common HTTP Status Codes
+- **200**: Success
+- **400**: Bad Request (missing/invalid parameters)
+- **401**: Unauthorized (missing/invalid authentication)
+- **404**: Not Found (chat not found or not accessible)
+- **500**: Internal Server Error
+
+### Error Response Format
+```json
+{
+  "error": "Error message description"
+}
+```
+
+## Rate Limiting & Performance
+
+### Polling Intervals
+- Chat list: 5 seconds
+- Chat content: 3 seconds
+- Command polling: Variable (controlled by extension)
+
+### Caching Strategy
+- Chat data cached in Redis with TTL
+- No HTTP caching (real-time updates required)
+- Efficient key-based lookups for user data
+
+## Security Considerations
+
+- All endpoints validate authentication tokens/sessions
+- Redis keys are user-scoped to prevent data leakage
+- CORS configured for development vs production
+- JWT tokens expire after 7 days
+- HTML content is stored as-is (sanitization on display)
+
+
+
+

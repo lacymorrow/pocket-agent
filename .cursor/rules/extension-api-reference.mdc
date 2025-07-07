@@ -1,0 +1,109 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Extension API Reference
+
+The VS Code extension communicates with the frontend application via these HTTP endpoints.
+
+## Authentication Endpoint
+
+### GitHub Token Exchange
+- **POST** `/api/auth/vscode/github-exchange`
+- **Purpose**: Exchange GitHub OAuth token for service JWT
+- **Headers**: `Content-Type: application/json`
+- **Body**:
+  ```json
+  {
+    "githubToken": "string"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "serviceToken": "jwt-string",
+    "expiresIn": 604800
+  }
+  ```
+
+## Chat Data Endpoints
+
+### Send Chat Update
+- **POST** `/api/chat/update`
+- **Purpose**: Send captured chat content to frontend
+- **Headers**:
+  - `Authorization: Bearer <jwt-token>`
+  - `Content-Type: application/json`
+- **Body**:
+  ```json
+  {
+    "windowId": "string",
+    "name": "string",
+    "html": "string"
+  }
+  ```
+- **Response**: `200 OK` on success
+
+### Poll for Commands
+- **GET** `/api/commands/poll-outgoing/[windowId]`
+- **Purpose**: Check for pending messages to send to Cursor
+- **Headers**: `Authorization: Bearer <jwt-token>`
+- **Response**:
+  ```json
+  {
+    "commands": [
+      {
+        "messageText": "string",
+        "timestamp": 1234567890
+      }
+    ]
+  }
+  ```
+
+## Extension Configuration
+
+### Server URL
+- Default: `http://localhost:3000`
+- Configurable via VS Code setting: `pocketAgent.serverUrl`
+- Environment variable: `POCKET_AGENT_SERVER_URL`
+
+### Authentication Flow
+1. Extension gets GitHub token from VS Code OAuth API
+2. Extension sends token to `/api/auth/vscode/github-exchange`
+3. Extension receives and stores service JWT token
+4. Extension uses JWT for all subsequent API calls
+
+## Error Handling
+
+### Common HTTP Status Codes
+- **200**: Success
+- **401**: Unauthorized (invalid or expired JWT)
+- **400**: Bad Request (malformed data)
+- **500**: Server Error
+
+### Extension Response
+- Extension logs errors to VS Code Output Panel
+- Extension retries failed requests with exponential backoff
+- Extension handles authentication renewal automatically
+
+## Implementation Details
+
+### Request Configuration
+```javascript
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': `Bearer ${serviceToken}`
+};
+```
+
+### Error Logging
+All API interactions are logged to VS Code Output Panel under "Pocket Agent" channel for debugging.
+
+### Polling Intervals
+- Command polling: Configurable interval (default varies based on activity)
+- Chat updates: Sent immediately when content changes detected
+
+
+
+
